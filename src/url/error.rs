@@ -1,12 +1,11 @@
 use std::fmt;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UrlValidationError {
     EmptyInput,
     InvalidScheme { found: String },
     MalformedUrl { reason: String },
     EmptyHost,
-    InvalidPort { port: u16 },
 }
 
 impl fmt::Display for UrlValidationError {
@@ -20,9 +19,6 @@ impl fmt::Display for UrlValidationError {
                 write!(f, "malformed URL: {}", reason)
             }
             UrlValidationError::EmptyHost => write!(f, "URL has no host"),
-            UrlValidationError::InvalidPort { port } => {
-                write!(f, "invalid port number: {}", port)
-            }
         }
     }
 }

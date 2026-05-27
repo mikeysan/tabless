@@ -15,6 +15,11 @@ fn parse_valid_http_url() {
 fn parse_valid_https_url() {
     let result = ValidatedUrl::parse("https://example.com");
     assert!(result.is_ok());
+    let validated = result.unwrap();
+    assert_eq!(validated.original(), "https://example.com");
+    assert_eq!(validated.canonical(), "https://example.com/");
+    assert_eq!(validated.scheme(), "https");
+    assert_eq!(validated.host(), "example.com");
 }
 
 #[test]

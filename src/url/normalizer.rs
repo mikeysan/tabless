@@ -5,7 +5,9 @@ pub fn normalize(url: &Url) -> Url {
     if let Some(host) = normalized.host_str() {
         let lower = host.to_lowercase();
         if host != lower {
-            let _ = normalized.set_host(Some(&lower));
+            normalized
+                .set_host(Some(&lower))
+                .expect("lowercasing an existing valid host should never fail");
         }
     }
     normalized
@@ -14,7 +16,6 @@ pub fn normalize(url: &Url) -> Url {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use url::Url;
 
     #[test]
     fn normalize_already_lowercase_noop() {
