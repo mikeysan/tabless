@@ -1,0 +1,104 @@
+use std::io::{BufRead, BufReader, Write};
+use std::path::Path;
+
+use interprocess::local_socket::{
+    prelude::{LocalSocketListener, LocalSocketStream},
+    traits::Listener,
+    ConnectOptions, GenericFilePath, ListenerOptions, ToFsName,
+};
+
+use super::error::ProtocolError;
+
+pub struct IpcServer {
+    listener: LocalSocketListener,
+}
+
+impl IpcServer {
+    pub fn bind(socket_path: &Path) -> Result<Self, ProtocolError> {
+        #[cfg(unix)]
+        let _ = std::fs::remove_file(socket_path);
+
+        let name = socket_path
+            .to_fs_name::<GenericFilePath>()
+            .map_err(|e| ProtocolError::IpcBindFailed { reason: e.to_string() })?;
+
+        let listener = ListenerOptions::new()
+            .name(name)
+            .create_sync()
+            .map_err(|e| ProtocolError::IpcBindFailed { reason: e.to_string() })?;
+
+        Ok(Self { listener })
+    }
+
+    pub fn accept_url(&self) -> Result<String, ProtocolError> {
+        let stream = self
+            .listener
+            .accept()
+            .map_err(|e| ProtocolError::IpcBindFailed { reason: e.to_string() })?;
+
+        let mut reader = BufReader::new(stream);
+        let mut line = String::new();
+        reader
+            .read_line(&mut line)
+            .map_err(|e| ProtocolError::IpcBindFailed { reason: e.to_string() })?;
+
+        line.strip_prefix("URL:")
+            .map(|s| s.trim_end().to_string())
+            .ok_or_else(|| ProtocolError::InvalidUrl {
+                reason: "missing URL: prefix".to_string(),
+            })
+    }
+}
+
+pub struct IpcClient {
+    stream: LocalSocketStream,
+}
+
+impl IpcClient {
+    pub fn connect(socket_path: &Path) -> Result<Self, ProtocolError> {
+        let name = socket_path
+            .to_fs_name::<GenericFilePath>()
+            .map_err(|e| ProtocolError::IpcConnectFailed { reason: e.to_string() })?;
+
+        let stream = ConnectOptions::new()
+            .name(name)
+            .connect_sync()
+            .map_err(|e| ProtocolError::IpcConnectFailed { reason: e.to_string() })?;
+
+        Ok(Self { stream })
+    }
+
+    pub fn send_url(&mut self, url: &str) -> Result<(), ProtocolError> {
+        writeln!(self.stream, "URL:{}", url)
+            .map_err(|e| ProtocolError::IpcConnectFailed { reason: e.to_string() })?;
+        self.stream
+            .flush()
+            .map_err(|e| ProtocolError::IpcConnectFailed { reason: e.to_string() })?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::thread;
+
+    #[test]
+    fn roundtrip_url() {
+        let tmp_dir =
+            std::env::temp_dir().join(format!("tabless-test-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&tmp_dir);
+        let socket_path = tmp_dir.join("ipc.sock");
+
+        let server = IpcServer::bind(&socket_path).unwrap();
+        let expected_url = "https://example.com/test";
+
+        let handle = thread::spawn(move || server.accept_url().unwrap());
+
+        let mut client = IpcClient::connect(&socket_path).unwrap();
+        client.send_url(expected_url).unwrap();
+
+        let received = handle.join().unwrap();
+        assert_eq!(received, expected_url);
+    }
+}
