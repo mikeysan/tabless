@@ -1,3 +1,5 @@
+use std::path::Path;
+use tabless::storage::connection::open_connection;
 use tabless::storage::migrations::MigrationRunner;
 
 #[test]
@@ -34,4 +36,10 @@ fn migration_runner_is_idempotent() {
     let mut runner = MigrationRunner::new(&mut conn);
     runner.run_all().unwrap();
     runner.run_all().unwrap(); // should not fail
+}
+
+#[test]
+fn open_in_memory_connection() {
+    let result = open_connection(Path::new(":memory:"));
+    assert!(result.is_ok());
 }
