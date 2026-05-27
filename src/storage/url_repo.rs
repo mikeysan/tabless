@@ -237,3 +237,54 @@ impl<'a> UrlRepository<'a> {
             .as_secs() as i64
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use rusqlite::Connection;
+
+    use super::*;
+    use crate::storage::migrations::MigrationRunner;
+    use crate::url::ValidatedUrl;
+
+    fn setup() -> Connection {
+        let mut conn = Connection::open_in_memory().unwrap();
+        let mut runner = MigrationRunner::new(&mut conn);
+        runner.run_all().unwrap();
+        conn
+    }
+
+    #[test]
+    fn insert_returns_id() {
+        let conn = setup();
+        let repo = UrlRepository::new(&conn);
+        let url = ValidatedUrl::parse("https://example.com").unwrap();
+        let id = repo.insert(&url, None).unwrap();
+        assert!(id > 0);
+    }
+
+    #[test]
+    fn find_missing_returns_none() {
+        let conn = setup();
+        let repo = UrlRepository::new(&conn);
+        let result = repo.find_by_id(999).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn list_inbox_excludes_archived() {
+        let conn = setup();
+        let repo = UrlRepository::new(&conn);
+        let url = ValidatedUrl::parse("https://example.com").unwrap();
+        let id = repo.insert(&url, None).unwrap();
+        repo.set_archived(id, true).unwrap();
+        let inbox = repo.list_inbox().unwrap();
+        assert!(inbox.is_empty());
+    }
+
+    #[test]
+    fn exists_false_for_unknown() {
+        let conn = setup();
+        let repo = UrlRepository::new(&conn);
+        assert!(!repo.exists("https://unknown.com/").unwrap());
+    }
+}

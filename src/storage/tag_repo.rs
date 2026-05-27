@@ -119,3 +119,35 @@ impl<'a> TagRepository<'a> {
             })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use rusqlite::Connection;
+
+    use super::*;
+    use crate::storage::migrations::MigrationRunner;
+
+    fn setup() -> Connection {
+        let mut conn = Connection::open_in_memory().unwrap();
+        let mut runner = MigrationRunner::new(&mut conn);
+        runner.run_all().unwrap();
+        conn
+    }
+
+    #[test]
+    fn create_duplicate_fails() {
+        let conn = setup();
+        let repo = TagRepository::new(&conn);
+        repo.create("rust").unwrap();
+        let result = repo.create("rust");
+        assert!(matches!(result, Err(StorageError::ConstraintViolation { .. })));
+    }
+
+    #[test]
+    fn list_for_url_empty_when_none_attached() {
+        let conn = setup();
+        let repo = TagRepository::new(&conn);
+        let tags = repo.list_for_url(1).unwrap();
+        assert!(tags.is_empty());
+    }
+}

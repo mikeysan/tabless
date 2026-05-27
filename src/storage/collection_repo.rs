@@ -117,3 +117,35 @@ impl<'a> CollectionRepository<'a> {
             })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use rusqlite::Connection;
+
+    use super::*;
+    use crate::storage::migrations::MigrationRunner;
+
+    fn setup() -> Connection {
+        let mut conn = Connection::open_in_memory().unwrap();
+        let mut runner = MigrationRunner::new(&mut conn);
+        runner.run_all().unwrap();
+        conn
+    }
+
+    #[test]
+    fn create_duplicate_fails() {
+        let conn = setup();
+        let repo = CollectionRepository::new(&conn);
+        repo.create("work").unwrap();
+        let result = repo.create("work");
+        assert!(matches!(result, Err(StorageError::ConstraintViolation { .. })));
+    }
+
+    #[test]
+    fn list_for_url_empty_when_none_attached() {
+        let conn = setup();
+        let repo = CollectionRepository::new(&conn);
+        let collections = repo.list_for_url(1).unwrap();
+        assert!(collections.is_empty());
+    }
+}

@@ -50,3 +50,34 @@ impl<'a> MigrationRunner<'a> {
             .as_secs() as i64
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use rusqlite::Connection;
+
+    use super::*;
+
+    #[test]
+    fn run_all_creates_tables() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        let mut runner = MigrationRunner::new(&mut conn);
+        runner.run_all().unwrap();
+
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(count > 0);
+    }
+
+    #[test]
+    fn run_all_is_idempotent() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        let mut runner = MigrationRunner::new(&mut conn);
+        runner.run_all().unwrap();
+        runner.run_all().unwrap(); // should not fail
+    }
+}
