@@ -42,4 +42,10 @@ fn migration_runner_is_idempotent() {
 fn open_in_memory_connection() {
     let result = open_connection(Path::new(":memory:"));
     assert!(result.is_ok());
+
+    let conn = result.unwrap();
+    let fk: i32 = conn
+        .query_row("PRAGMA foreign_keys", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(fk, 1);
 }
