@@ -1,6 +1,7 @@
 use std::path::Path;
 use tabless::storage::connection::open_connection;
 use tabless::storage::migrations::MigrationRunner;
+use tabless::storage::collection_repo::CollectionRepository;
 use tabless::storage::tag_repo::TagRepository;
 use tabless::storage::url_repo::UrlRepository;
 use tabless::storage::StorageError;
@@ -207,4 +208,59 @@ fn tag_repo_delete() {
     repo.delete(id).unwrap();
     let tags = repo.list_all().unwrap();
     assert!(tags.is_empty());
+}
+
+#[test]
+fn collection_repo_create_and_list() {
+    let conn = setup();
+    let repo = CollectionRepository::new(&conn);
+
+    let id = repo.create("work").unwrap();
+    let collections = repo.list_all().unwrap();
+    assert_eq!(collections.len(), 1);
+    assert_eq!(collections[0].name, "work");
+    assert_eq!(collections[0].id, id);
+}
+
+#[test]
+fn collection_repo_attach_and_list_for_url() {
+    let conn = setup();
+    let url_repo = UrlRepository::new(&conn);
+    let coll_repo = CollectionRepository::new(&conn);
+    let url = ValidatedUrl::parse("https://example.com").unwrap();
+
+    let url_id = url_repo.insert(&url, None).unwrap();
+    let coll_id = coll_repo.create("work").unwrap();
+    coll_repo.attach_to_url(url_id, coll_id).unwrap();
+
+    let collections = coll_repo.list_for_url(url_id).unwrap();
+    assert_eq!(collections.len(), 1);
+    assert_eq!(collections[0].name, "work");
+}
+
+#[test]
+fn collection_repo_detach() {
+    let conn = setup();
+    let url_repo = UrlRepository::new(&conn);
+    let coll_repo = CollectionRepository::new(&conn);
+    let url = ValidatedUrl::parse("https://example.com").unwrap();
+
+    let url_id = url_repo.insert(&url, None).unwrap();
+    let coll_id = coll_repo.create("work").unwrap();
+    coll_repo.attach_to_url(url_id, coll_id).unwrap();
+    coll_repo.detach_from_url(url_id, coll_id).unwrap();
+
+    let collections = coll_repo.list_for_url(url_id).unwrap();
+    assert!(collections.is_empty());
+}
+
+#[test]
+fn collection_repo_delete() {
+    let conn = setup();
+    let repo = CollectionRepository::new(&conn);
+
+    let id = repo.create("work").unwrap();
+    repo.delete(id).unwrap();
+    let collections = repo.list_all().unwrap();
+    assert!(collections.is_empty());
 }
