@@ -264,3 +264,14 @@ fn collection_repo_delete() {
     let collections = repo.list_all().unwrap();
     assert!(collections.is_empty());
 }
+
+use tabless::storage::Storage;
+
+#[test]
+fn storage_open_in_memory() {
+    let storage = Storage::open(Path::new(":memory:")).unwrap();
+    let url = ValidatedUrl::parse("https://example.com").unwrap();
+    let id = storage.urls().insert(&url, Some("Example")).unwrap();
+    let found = storage.urls().find_by_id(id).unwrap();
+    assert!(found.is_some());
+}
