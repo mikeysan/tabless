@@ -8,6 +8,12 @@ pub struct FuzzySearchIndex {
     scoring: Scoring,
 }
 
+impl Default for FuzzySearchIndex {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FuzzySearchIndex {
     pub fn new() -> Self {
         FuzzySearchIndex {
@@ -43,7 +49,7 @@ impl FuzzySearchIndex {
             })
             .collect();
 
-        results.sort_by(|a, b| b.score.cmp(&a.score));
+        results.sort_by_key(|b| std::cmp::Reverse(b.score));
         results.truncate(20);
         results
     }

@@ -15,10 +15,13 @@ impl<'a> MigrationRunner<'a> {
     }
 
     pub fn run_all(&mut self) -> Result<(), StorageError> {
-        let tx = self.conn.transaction().map_err(|e| StorageError::MigrationFailed {
-            version: 1,
-            reason: e.to_string(),
-        })?;
+        let tx = self
+            .conn
+            .transaction()
+            .map_err(|e| StorageError::MigrationFailed {
+                version: 1,
+                reason: e.to_string(),
+            })?;
 
         tx.execute_batch(INIT_SQL)
             .map_err(|e| StorageError::MigrationFailed {

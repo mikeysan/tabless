@@ -1,4 +1,4 @@
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::url::ValidatedUrl;
 
@@ -26,11 +26,7 @@ impl<'a> UrlRepository<'a> {
         UrlRepository { conn }
     }
 
-    pub fn insert(
-        &self,
-        url: &ValidatedUrl,
-        title: Option<&str>,
-    ) -> Result<i64, StorageError> {
+    pub fn insert(&self, url: &ValidatedUrl, title: Option<&str>) -> Result<i64, StorageError> {
         let now = Self::now();
         self.conn
             .execute(
@@ -92,10 +88,7 @@ impl<'a> UrlRepository<'a> {
         self.list_where("pinned = 1")
     }
 
-    fn list_where(
-        &self,
-        condition: &str,
-    ) -> Result<Vec<UrlRecord>, StorageError> {
+    fn list_where(&self, condition: &str) -> Result<Vec<UrlRecord>, StorageError> {
         let sql = format!(
             "SELECT id, canonical_url, original_url, title, favicon_path,
                     created_at, updated_at, archived, pinned
@@ -131,11 +124,7 @@ impl<'a> UrlRepository<'a> {
             })
     }
 
-    pub fn set_archived(
-        &self,
-        id: i64,
-        archived: bool,
-    ) -> Result<(), StorageError> {
+    pub fn set_archived(&self, id: i64, archived: bool) -> Result<(), StorageError> {
         self.conn
             .execute(
                 "UPDATE urls SET archived = ?1, updated_at = ?2 WHERE id = ?3",
@@ -147,11 +136,7 @@ impl<'a> UrlRepository<'a> {
         Ok(())
     }
 
-    pub fn set_pinned(
-        &self,
-        id: i64,
-        pinned: bool,
-    ) -> Result<(), StorageError> {
+    pub fn set_pinned(&self, id: i64, pinned: bool) -> Result<(), StorageError> {
         self.conn
             .execute(
                 "UPDATE urls SET pinned = ?1, updated_at = ?2 WHERE id = ?3",
@@ -163,9 +148,7 @@ impl<'a> UrlRepository<'a> {
         Ok(())
     }
 
-    pub fn delete(&self,
-        id: i64,
-    ) -> Result<(), StorageError> {
+    pub fn delete(&self, id: i64) -> Result<(), StorageError> {
         self.conn
             .execute("DELETE FROM urls WHERE id = ?1", [id])
             .map_err(|e| StorageError::QueryFailed {
@@ -174,9 +157,7 @@ impl<'a> UrlRepository<'a> {
         Ok(())
     }
 
-    pub fn exists(&self,
-        canonical: &str,
-    ) -> Result<bool, StorageError> {
+    pub fn exists(&self, canonical: &str) -> Result<bool, StorageError> {
         let count: i64 = self
             .conn
             .query_row(
@@ -190,10 +171,7 @@ impl<'a> UrlRepository<'a> {
         Ok(count > 0)
     }
 
-    pub fn search_fts(
-        &self,
-        query: &str,
-    ) -> Result<Vec<UrlRecord>, StorageError> {
+    pub fn search_fts(&self, query: &str) -> Result<Vec<UrlRecord>, StorageError> {
         let mut stmt = self
             .conn
             .prepare(

@@ -1,10 +1,10 @@
 use std::path::Path;
+use tabless::storage::StorageError;
+use tabless::storage::collection_repo::CollectionRepository;
 use tabless::storage::connection::open_connection;
 use tabless::storage::migrations::MigrationRunner;
-use tabless::storage::collection_repo::CollectionRepository;
 use tabless::storage::tag_repo::TagRepository;
 use tabless::storage::url_repo::UrlRepository;
-use tabless::storage::StorageError;
 use tabless::url::ValidatedUrl;
 
 fn setup() -> rusqlite::Connection {
@@ -33,11 +33,9 @@ fn migration_runner_applies_schema() {
 
     // Verify _migrations tracking
     let version: i64 = conn
-        .query_row(
-            "SELECT version FROM _migrations LIMIT 1",
-            [],
-            |row| row.get(0),
-        )
+        .query_row("SELECT version FROM _migrations LIMIT 1", [], |row| {
+            row.get(0)
+        })
         .unwrap();
     assert_eq!(version, 1);
 }

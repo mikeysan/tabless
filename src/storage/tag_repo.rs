@@ -140,7 +140,10 @@ mod tests {
         let repo = TagRepository::new(&conn);
         repo.create("rust").unwrap();
         let result = repo.create("rust");
-        assert!(matches!(result, Err(StorageError::ConstraintViolation { .. })));
+        assert!(matches!(
+            result,
+            Err(StorageError::ConstraintViolation { .. })
+        ));
     }
 
     #[test]
