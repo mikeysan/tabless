@@ -1,4 +1,4 @@
-use tabless::url::{ValidatedUrl, UrlValidationError};
+use tabless::url::{UrlValidationError, ValidatedUrl};
 
 #[test]
 fn parse_valid_http_url() {
@@ -46,7 +46,10 @@ fn parse_rejects_file_scheme() {
 #[test]
 fn parse_rejects_malformed_url() {
     let result = ValidatedUrl::parse("not a url");
-    assert!(matches!(result, Err(UrlValidationError::MalformedUrl { .. })));
+    assert!(matches!(
+        result,
+        Err(UrlValidationError::MalformedUrl { .. })
+    ));
 }
 
 #[test]
