@@ -15,8 +15,11 @@ impl ValidatedUrl {
             return Err(UrlValidationError::EmptyInput);
         }
 
-        let parsed = Url::parse(input).map_err(|e| UrlValidationError::MalformedUrl {
-            reason: e.to_string(),
+        let parsed = Url::parse(input).map_err(|e| match e {
+            url::ParseError::EmptyHost => UrlValidationError::EmptyHost,
+            _ => UrlValidationError::MalformedUrl {
+                reason: e.to_string(),
+            },
         })?;
 
         let scheme = parsed.scheme();
@@ -101,11 +104,7 @@ mod tests {
     #[test]
     fn parse_rejects_missing_host() {
         let result = ValidatedUrl::parse("http:///");
-        assert!(matches!(
-            result,
-            Err(UrlValidationError::MalformedUrl { reason })
-            if reason == "empty host"
-        ));
+        assert!(matches!(result, Err(UrlValidationError::EmptyHost)));
     }
 
     #[test]
