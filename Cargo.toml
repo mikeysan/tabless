@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+dirs = "5"
 url = "2.5"
 rusqlite = { version = "0.32", features = ["bundled"] }
 sublime_fuzzy = "0.7"
