@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Storage Layer Implementation Plan</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --fg: #c9d1d9;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --accent2: #3fb950;
+      --border: #30363d;
+      --card: #161b22;
+      --code-bg: #1e2530;
+      --warn: #d29922;
+      --danger: #f85149;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      line-height: 1.6;
+      margin: 0;
+      padding: 0;
+    }
+    .container { max-width: 1100px; margin: 0 auto; padding: 2rem; }
+    h1 { color: var(--accent); border-bottom: 2px solid var(--border); padding-bottom: 0.5rem; }
+    h2 { color: var(--accent2); margin-top: 2.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }
+    h3 { color: var(--fg); margin-top: 2rem; }
+    .subtitle { color: var(--muted); font-size: 1.1rem; margin-bottom: 2rem; }
+    .task { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem; margin: 1.5rem 0; }
+    .task-header {
+      display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;
+    }
+    .task-num {
+      background: var(--accent); color: #000; font-weight: bold;
+      width: 32px; height: 32px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.9rem; flex-shrink: 0;
+    }
+    .task-title { font-size: 1.2rem; font-weight: 600; }
+    .file-list { background: var(--code-bg); border-radius: 6px; padding: 0.75rem 1rem; margin: 0.75rem 0; font-family: "SFMono-Regular", Consolas, monospace; font-size: 0.85rem; }
+    .file-create { color: var(--accent2); }
+    .file-modify { color: var(--warn); }
+    pre {
+      background: var(--code-bg);
+      border-radius: 6px;
+      padding: 1rem;
+      overflow-x: auto;
+      font-size: 0.85rem;
+      line-height: 1.5;
+    }
+    code {
+      font-family: "SFMono-Regular", Consolas, monospace;
+      background: var(--code-bg);
+      padding: 0.15rem 0.35rem;
+      border-radius: 4px;
+      font-size: 0.9em;
+    }
+    .schema-table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.9rem; }
+    .schema-table th, .schema-table td { border: 1px solid var(--border); padding: 0.5rem 0.75rem; text-align: left; }
+    .schema-table th { background: var(--code-bg); color: var(--accent); }
+    .schema-table td { color: var(--fg); }
+    .diagram {
+      background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+      padding: 1.5rem; margin: 1rem 0; font-family: "SFMono-Regular", Consolas, monospace;
+      white-space: pre; overflow-x: auto; color: var(--muted);
+    }
+    .diagram .node { color: var(--accent); }
+    .diagram .arrow { color: var(--accent2); }
+    .diagram .data { color: var(--warn); }
+    .highlight-box {
+      background: rgba(88, 166, 255, 0.1); border-left: 3px solid var(--accent);
+      padding: 1rem; margin: 1rem 0; border-radius: 0 6px 6px 0;
+    }
+    .warn-box {
+      background: rgba(210, 153, 34, 0.1); border-left: 3px solid var(--warn);
+      padding: 1rem; margin: 1rem 0; border-radius: 0 6px 6px 0;
+    }
+    .success-box {
+      background: rgba(63, 185, 80, 0.1); border-left: 3px solid var(--accent2);
+      padding: 1rem; margin: 1rem 0; border-radius: 0 6px 6px 0;
+    }
+    .step { margin: 0.75rem 0; padding-left: 1rem; border-left: 2px solid var(--border); }
+    .step-title { font-weight: 600; color: var(--fg); }
+    .step-detail { color: var(--muted); font-size: 0.9rem; }
+    .tag {
+      display: inline-block; padding: 0.2rem 0.5rem; border-radius: 12px;
+      font-size: 0.75rem; font-weight: 600; margin-right: 0.3rem;
+    }
+    .tag-create { background: rgba(63, 185, 80, 0.2); color: var(--accent2); }
+    .tag-modify { background: rgba(210, 153, 34, 0.2); color: var(--warn); }
+    .tag-test { background: rgba(88, 166, 255, 0.2); color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:8px;color:var(--accent)"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg> Storage Layer Implementation Plan</h1>
+    <p class="subtitle">Build a SQLite-backed persistence layer with migrations, CRUD repositories, and full-text search.</p>
+
+    <div class="highlight-box">
+      <strong>Goal:</strong> Persist validated URLs, tags, and collections in SQLite. Provide a synchronous, type-safe API that downstream modules (UI, protocol handlers, search) use without knowledge of the underlying database.
+    </div>
+
+    <div class="success-box">
+      <strong>Tech Stack:</strong> Rust, rusqlite (bundled), sublime_fuzzy <br>
+      <strong>Approach:</strong> Domain-split repositories share a single Connection via the Storage struct. Explicit SQL migrations with a Rust runner. Synchronous API throughout.
+    </div>
+
+    <h2>File Structure</h2>
+    <pre>src/
+  lib.rs                          -- pub mod storage; pub mod url;
+  storage/
+    mod.rs                        -- Storage struct, re-exports
+    connection.rs                 -- open_connection(path)
+    error.rs                      -- StorageError enum
+    migrations.rs                 -- MigrationRunner
+    migrations/
+      0001_init.sql               -- schema V1
+    url_repo.rs                   -- UrlRepository (CRUD, archive/pin, FTS)
+    tag_repo.rs                   -- TagRepository
+    collection_repo.rs            -- CollectionRepository
+    search.rs                     -- FuzzySearchIndex
+tests/
+  storage_integration_tests.rs  -- end-to-end tests</pre>
+
+    <h2>Schema (Migration V1)</h2>
+
+    <h3><code>urls</code> Table</h3>
+    <table class="schema-table">
+      <tr><th>Column</th><th>Type</th><th>Constraints</th></tr>
+      <tr><td>id</td><td>INTEGER</td><td>PRIMARY KEY</td></tr>
+      <tr><td>canonical_url</td><td>TEXT</td><td>NOT NULL, UNIQUE</td></tr>
+      <tr><td>original_url</td><td>TEXT</td><td>NOT NULL</td></tr>
+      <tr><td>title</td><td>TEXT</td><td></td></tr>
+      <tr><td>favicon_path</td><td>TEXT</td><td></td></tr>
+      <tr><td>created_at</td><td>INTEGER</td><td>NOT NULL</td></tr>
+      <tr><td>updated_at</td><td>INTEGER</td><td>NOT NULL</td></tr>
+      <tr><td>archived</td><td>INTEGER</td><td>NOT NULL DEFAULT 0</td></tr>
+      <tr><td>pinned</td><td>INTEGER</td><td>NOT NULL DEFAULT 0</td></tr>
+    </table>
+
+    <h3><code>tags</code> & <code>collections</code> Tables</h3>
+    <table class="schema-table">
+      <tr><th>Column</th><th>Type</th><th>Constraints</th></tr>
+      <tr><td>id</td><td>INTEGER</td><td>PRIMARY KEY</td></tr>
+      <tr><td>name</td><td>TEXT</td><td>NOT NULL, UNIQUE</td></tr>
+    </table>
+
+    <h3>Junction Tables</h3>
+    <pre>url_tags (url_id → urls.id, tag_id → tags.id)
+url_collections (url_id → urls.id, collection_id → collections.id)
+Both: ON DELETE CASCADE</pre>
+
+    <h3>FTS5 Virtual Table & Triggers</h3>
+    <pre>CREATE VIRTUAL TABLE fts_urls USING fts5(
+    canonical_url, title,
+    content='urls', content_rowid='id'
+);
+
+-- Auto-sync triggers keep fts_urls in sync with urls table
+CREATE TRIGGER urls_fts_insert AFTER INSERT ON urls ...
+CREATE TRIGGER urls_fts_update AFTER UPDATE ON urls ...
+CREATE TRIGGER urls_fts_delete AFTER DELETE ON urls ...</pre>
+
+    <h2>Data Flow</h2>
+    <div class="diagram">
+<span class="node">Raw URL string</span>
+       <span class="arrow">│</span>
+       <span class="arrow">└─→</span> <span class="node">ValidatedUrl::parse(input)</span>
+       <span class="arrow">│</span>
+       <span class="arrow">└─→</span> <span class="node">Storage::urls().insert(&validated, title)</span>
+       <span class="arrow">│</span>
+       <span class="arrow">└─→</span> <span class="data">SQLite (urls table + fts_urls index)</span>
+       <span class="arrow">│</span>
+       <span class="arrow">└─→</span> <span class="node">Search or UI query returns UrlRecord</span>
+    </div>
+
+    <h2>Public API Preview</h2>
+
+    <h3>Storage</h3>
+    <pre>pub struct Storage { /* private Connection */ }
+
+impl Storage {
+    pub fn open(path: &Path) -> Result<Self, StorageError>;
+    pub fn urls(&self)       -> UrlRepository<'_>;
+    pub fn tags(&self)       -> TagRepository<'_>;
+    pub fn collections(&self) -> CollectionRepository<'_>;
+}</pre>
+
+    <h3>UrlRepository</h3>
+    <pre>pub fn insert(&self, url: &ValidatedUrl, title: Option<&str>) -> Result<i64, StorageError>;
+pub fn find_by_id(&self, id: i64) -> Result<Option<UrlRecord>, StorageError>;
+pub fn list_inbox(&self)    -> Result<Vec<UrlRecord>, StorageError>;   // archived = 0
+pub fn list_archived(&self) -> Result<Vec<UrlRecord>, StorageError>;   // archived = 1
+pub fn list_pinned(&self)   -> Result<Vec<UrlRecord>, StorageError>;   // pinned = 1
+pub fn set_archived(&self, id: i64, archived: bool) -> Result<(), StorageError>;
+pub fn set_pinned(&self, id: i64, pinned: bool)     -> Result<(), StorageError>;
+pub fn delete(&self, id: i64)    -> Result<(), StorageError>;
+pub fn exists(&self, canonical: &str) -> Result<bool, StorageError>;
+pub fn search_fts(&self, query: &str)  -> Result<Vec<UrlRecord>, StorageError>;</pre>
+
+    <h3>TagRepository / CollectionRepository</h3>
+    <pre>pub fn create(&self, name: &str) -> Result<i64, StorageError>;
+pub fn list_all(&self) -> Result<Vec<TagRecord>, StorageError>;
+pub fn delete(&self, id: i64) -> Result<(), StorageError>;
+pub fn attach_to_url(&self, url_id: i64, tag_id: i64)     -> Result<(), StorageError>;
+pub fn detach_from_url(&self, url_id: i64, tag_id: i64)   -> Result<(), StorageError>;
+pub fn list_for_url(&self, url_id: i64) -> Result<Vec<TagRecord>, StorageError>;</pre>
+
+    <h3>FuzzySearchIndex</h3>
+    <pre>pub struct FuzzySearchIndex {
+    candidates: Vec<String>,
+    scoring: Scoring,
+}
+
+impl FuzzySearchIndex {
+    pub fn new() -> Self;
+    pub fn rebuild(&mut self, repo: &UrlRepository) -> Result<(), StorageError>;
+    pub fn search(&self, query: &str) -> Vec<SearchResult>;  // top 20, scored
+}</pre>
+
+    <h2>Search Strategy</h2>
+    <div class="warn-box">
+      <strong>Tier 1 — FTS5</strong>: Broad text filtering. Queries like <code>example</code> match <code>example.com</code> and titles containing "example". Used for the initial filter.
+    </div>
+    <div class="highlight-box">
+      <strong>Tier 2 — In-Memory Fuzzy</strong>: On startup, load all non-archived URL titles and canonical URLs into memory. Score each candidate with <code>sublime_fuzzy::FuzzySearch</code>. Return top-N results sorted by score. Memory footprint < 1MB for thousands of URLs.
+    </div>
+
+    <h2>Error Types</h2>
+    <pre>pub enum StorageError {
+    ConnectionFailed    { reason: String },
+    MigrationFailed     { version: u32, reason: String },
+    ConstraintViolation { table: String, reason: String },
+    NotFound            { table: String, id: i64 },
+    QueryFailed         { reason: String },
+}
+
+// Implements Display + std::error::Error</pre>
+
+    <h2>Tasks at a Glance</h2>
+
+    <div class="task">
+      <div class="task-header">
+        <div class="task-num">1</div>
+        <div class="task-title">Add rusqlite Dependency</div>
+      </div>
+      <div class="file-list">
+        <span class="file-modify">Modify: Cargo.toml</span>
+      </div>
+      <p>Add <code>rusqlite = { version = "0.32", features = ["bundled"] }</code> and <code>sublime_fuzzy = "0.7"</code> to dependencies. Verify with <code>cargo check</code>.</p>
+    </div>
+
+    <div class="task">
+      <div class="task-header">
+        <div class="task-num">2</div>
+        <div class="task-title">Define StorageError</div>
+      </div>
+      <div class="file-list">
+        <span class="file-create">Create: src/storage/error.rs</span><br>
+        <span class="file-create">Create: src/storage/mod.rs</span><br>
+        <span class="file-modify">Modify: src/lib.rs</span>
+      </div>
+      <p>Define the typed error enum with <code>Display</code> and <code>std::error::Error</code> implementations. Wire up <code>pub mod storage;</code> in lib.rs.</p>
+    </div>
+
+    <div class="task">
+      <div class="task-header">
+        <div class="task-num">3</div>
+        <div class="task-title">Create Migration SQL and Runner</div>
+      </div>
+      <div class="file-list">
+        <span class="file-create">Create: src/storage/migrations/0001_init.sql</span><br>
+        <span class="file-create">Create: src/storage/migrations.rs</span><br>
+        <span class="file-modify">Modify: src/storage/mod.rs</span>
+      </div>
+      <p>Write the full V1 schema (urls, tags, collections, junctions, FTS5, triggers) as a SQL file. Implement <code>MigrationRunner</code> that applies the SQL and tracks versions in a <code>_migrations</code> table. Uses <code>include_str!</code> to embed the SQL at compile time.</p>
+    </div>
+
+    <div class="task">
+      <div class="task-header">
+        <div class="task-num">4</div>
+        <div class="task-title">Implement Connection Manager</div>
+      </div>
+      <div class="file-list">
+        <span class="file-create">Create: src/storage/connection.rs</span><br>
+        <span class="file-modify">Modify: src/storage/mod.rs</span>
+      </div>
+      <p><code>open_connection(path: &Path)</code> opens the SQLite file and runs <code>PRAGMA foreign_keys = ON</code>. Returns typed errors on failure.</p>
+    </div>
+
+    <div class="task">
+      <div class="task-header">
+        <div class="task-num">5</div>
+        <div class="task-title">Implement UrlRepository</div>
+      </div>
+      <div class="file-list">
+        <span class="file-create">Create: src/storage/url_repo.rs</span><br>
+        <span class="file-modify">Modify: src/storage/mod.rs</span><br>
+        <span class="file-modify">Modify: tests/storage_integration_tests.rs</span>
+      </div>
+      <p>The core repository. Implements insert, find_by_id, list_inbox/archived/pinned, set_archived, set_pinned, delete, exists, and search_fts. All queries are parameterized. Duplicate canonical URLs return <code>ConstraintViolation</code>. 8 integration tests cover all methods.</p>
+    </div>
+
+    <div class="task">
+      <div class="task-header">
+        <div class="task-num">6</div>
+        <div class="task-title">Implement TagRepository</div>
+      </div>
+      <div class="file-list">
+        <span class="file-create">Create: src/storage/tag_repo.rs</span><br>
+        <span class="file-modify">Modify: src/storage/mod.rs</span>
+      </div>
+      <p>CRUD for tags plus attach/detach from URLs via the <code>url_tags</code> junction table. Duplicate tag names return <code>ConstraintViolation</code>.</p>
+    </div>
+
+    <div class="task">
+      <div class="task-header">
+        <div class="task-num">7</div>
+        <div class="task-title">Implement CollectionRepository</div>
+      </div>
+      <div class="file-list">
+        <span class="file-create">Create: src/storage/collection_repo.rs</span><br>
+        <span class="file-modify">Modify: src/storage/mod.rs</span>
+      </div>
+      <p>Identical API shape to TagRepository, operating on <code>collections</code> and <code>url_collections</code> tables. Both repositories share the same pattern and test coverage.</p>
+    </div>
+
+    <div class="task">
+      <div class="task-header">
+        <div class="task-num">8</div>
+        <div class="task-title">Implement Storage Struct</div>
+      </div>
+      <div class="file-list">
+        <span class="file-modify">Modify: src/storage/mod.rs</span>
+      </div>
+      <p>The composite root. <code>Storage::open(path)</code> opens the connection, runs migrations, and exposes <code>urls()</code>, <code>tags()</code>, <code>collections()</code> methods that return lifetime-bound repository references. No lifetime extension tricks — clean, safe Rust.</p>
+    </div>
+
+    <div class="task">
+      <div class="task-header">
+        <div class="task-num">9</div>
+        <div class="task-title">Add Fuzzy Search</div>
+      </div>
+      <div class="file-list">
+        <span class="file-create">Create: src/storage/search.rs</span><br>
+        <span class="file-modify">Modify: src/storage/mod.rs</span>
+      </div>
+      <p><code>FuzzySearchIndex</code> loads non-archived URL titles and canonical URLs into memory. Uses <code>sublime_fuzzy::FuzzySearch</code> to score candidates. Returns top 20 results sorted by score. Rebuilt on demand via <code>rebuild()</code>.</p>
+    </div>
+
+    <div class="task">
+      <div class="task-header">
+        <div class="task-num">10</div>
+        <div class="task-title">Add Unit Tests for Edge Cases</div>
+      </div>
+      <div class="file-list">
+        <span class="file-modify">Modify: src/storage/url_repo.rs</span><br>
+        <span class="file-modify">Modify: src/storage/tag_repo.rs</span><br>
+        <span class="file-modify">Modify: src/storage/collection_repo.rs</span><br>
+        <span class="file-modify">Modify: src/storage/migrations.rs</span>
+      </div>
+      <p>Unit tests in <code>#[cfg(test)]</code> modules covering: missing records, empty lists, duplicate constraints, inbox exclusion of archived items, and idempotent migrations. All use in-memory SQLite (<code>:memory:</code>) for isolation.</p>
+    </div>
+
+    <div class="task">
+      <div class="task-header">
+        <div class="task-num">11</div>
+        <div class="task-title">Final Verification</div>
+      </div>
+      <p>Run <code>cargo test</code>, <code>cargo clippy -- -D warnings</code>, <code>cargo fmt</code>, and <code>cargo build --release</code>. Commit all changes.</p>
+    </div>
+
+    <h2>Success Criteria</h2>
+    <ul>
+      <li><code>Storage::open</code> creates or migrates the database on first run.</li>
+      <li><code>UrlRepository::insert</code> accepts a <code>ValidatedUrl</code> and returns an ID.</li>
+      <li>Duplicate canonical URLs are rejected with <code>ConstraintViolation</code>.</li>
+      <li>FTS search returns relevant results for title and URL text.</li>
+      <li>Archive/pin state changes persist and are reflected in list queries.</li>
+      <li>Tags and collections can be created, attached, detached, and listed.</li>
+      <li>All repository operations return typed errors, never panic.</li>
+    </ul>
+
+    <div class="success-box">
+      <strong>Execution Options:</strong><br>
+      1. <strong>Subagent-Driven (recommended)</strong> — fresh subagent per task, two-stage review between tasks<br>
+      2. <strong>Inline Execution</strong> — execute tasks in this session with checkpoints
+    </div>
+
+    <footer style="margin-top:3rem;padding-top:1rem;border-top:1px solid var(--border);color:var(--muted);font-size:0.85rem;">
+      Plan: <code>docs/superpowers/plans/2026-05-28-storage-layer.md</code> <br>
+      Spec: <code>docs/superpowers/specs/2026-05-28-storage-layer-design.md</code>
+    </footer>
+  </div>
+</body>
+</html>
