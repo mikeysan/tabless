@@ -1,6 +1,7 @@
 use std::path::Path;
 use tabless::storage::connection::open_connection;
 use tabless::storage::migrations::MigrationRunner;
+use tabless::storage::tag_repo::TagRepository;
 use tabless::storage::url_repo::UrlRepository;
 use tabless::storage::StorageError;
 use tabless::url::ValidatedUrl;
@@ -151,4 +152,59 @@ fn url_repo_search_fts() {
     repo.insert(&url, Some("Example Site")).unwrap();
     let results = repo.search_fts("example").unwrap();
     assert_eq!(results.len(), 1);
+}
+
+#[test]
+fn tag_repo_create_and_list() {
+    let conn = setup();
+    let repo = TagRepository::new(&conn);
+
+    let id = repo.create("rust").unwrap();
+    let tags = repo.list_all().unwrap();
+    assert_eq!(tags.len(), 1);
+    assert_eq!(tags[0].name, "rust");
+    assert_eq!(tags[0].id, id);
+}
+
+#[test]
+fn tag_repo_attach_and_list_for_url() {
+    let conn = setup();
+    let url_repo = UrlRepository::new(&conn);
+    let tag_repo = TagRepository::new(&conn);
+    let url = ValidatedUrl::parse("https://example.com").unwrap();
+
+    let url_id = url_repo.insert(&url, None).unwrap();
+    let tag_id = tag_repo.create("rust").unwrap();
+    tag_repo.attach_to_url(url_id, tag_id).unwrap();
+
+    let tags = tag_repo.list_for_url(url_id).unwrap();
+    assert_eq!(tags.len(), 1);
+    assert_eq!(tags[0].name, "rust");
+}
+
+#[test]
+fn tag_repo_detach() {
+    let conn = setup();
+    let url_repo = UrlRepository::new(&conn);
+    let tag_repo = TagRepository::new(&conn);
+    let url = ValidatedUrl::parse("https://example.com").unwrap();
+
+    let url_id = url_repo.insert(&url, None).unwrap();
+    let tag_id = tag_repo.create("rust").unwrap();
+    tag_repo.attach_to_url(url_id, tag_id).unwrap();
+    tag_repo.detach_from_url(url_id, tag_id).unwrap();
+
+    let tags = tag_repo.list_for_url(url_id).unwrap();
+    assert!(tags.is_empty());
+}
+
+#[test]
+fn tag_repo_delete() {
+    let conn = setup();
+    let repo = TagRepository::new(&conn);
+
+    let id = repo.create("rust").unwrap();
+    repo.delete(id).unwrap();
+    let tags = repo.list_all().unwrap();
+    assert!(tags.is_empty());
 }
