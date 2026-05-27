@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Protocol Handler — Implementation Plan</title>
+    <style>
+        :root {
+            --bg: #0d1117;
+            --surface: #161b22;
+            --surface-2: #21262d;
+            --border: #30363d;
+            --text: #c9d1d9;
+            --text-secondary: #8b949e;
+            --accent: #58a6ff;
+            --accent-dim: #1f6feb;
+            --success: #3fb950;
+            --warning: #d29922;
+            --danger: #f85149;
+            --code-bg: #161b22;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            padding: 2rem 1rem;
+        }
+        .container { max-width: 1100px; margin: 0 auto; }
+        h1 { font-size: 2.5rem; margin-bottom: 0.5rem; color: #f0f6fc; }
+        .subtitle { color: var(--text-secondary); font-size: 1.1rem; margin-bottom: 2rem; }
+        .badge {
+            display: inline-block;
+            padding: 0.2rem 0.6rem;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .badge-rust { background: #dea58420; color: #dea584; border: 1px solid #dea58440; }
+        .badge-green { background: #3fb95020; color: var(--success); border: 1px solid #3fb95040; }
+        .badge-blue { background: #58a6ff20; color: var(--accent); border: 1px solid #58a6ff40; }
+        .badge-red { background: #f8514920; color: var(--danger); border: 1px solid #f8514940; }
+
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .card h2 {
+            font-size: 1.3rem;
+            color: #f0f6fc;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .card h3 {
+            font-size: 1.05rem;
+            color: var(--accent);
+            margin: 1.2rem 0 0.6rem;
+        }
+
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+        @media (max-width: 768px) {
+            .grid-2, .grid-3 { grid-template-columns: 1fr; }
+        }
+
+        .stat-box {
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem;
+            text-align: center;
+        }
+        .stat-box .number { font-size: 2rem; font-weight: 700; color: var(--accent); }
+        .stat-box .label { font-size: 0.85rem; color: var(--text-secondary); }
+
+        .task-list { list-style: none; }
+        .task-list li {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid var(--border);
+        }
+        .task-list li:last-child { border-bottom: none; }
+        .task-num {
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--accent);
+            flex-shrink: 0;
+        }
+        .task-body { flex: 1; }
+        .task-title { font-weight: 600; color: #f0f6fc; }
+        .task-meta { font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.2rem; }
+        .task-files { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.4rem; }
+        .file-tag {
+            font-size: 0.75rem;
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+        }
+        .file-tag.new { border-color: var(--success); color: var(--success); }
+        .file-tag.mod { border-color: var(--warning); color: var(--warning); }
+
+        pre {
+            background: var(--code-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem;
+            overflow-x: auto;
+            font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+            font-size: 0.85rem;
+            line-height: 1.5;
+        }
+        code { font-family: ui-monopoly, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+        .keyword { color: #ff7b72; }
+        .type { color: #ffa657; }
+        .string { color: #a5d6ff; }
+        .comment { color: #8b949e; }
+        .function { color: #d2a8ff; }
+        .macro { color: #79c0ff; }
+
+        .mermaid {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+
+        .platform-card {
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem;
+        }
+        .platform-card h4 {
+            color: var(--accent);
+            margin-bottom: 0.5rem;
+            font-size: 0.95rem;
+        }
+        .platform-card ul {
+            list-style: none;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+        .platform-card li {
+            padding: 0.3rem 0;
+            border-bottom: 1px solid var(--border);
+        }
+        .platform-card li:last-child { border-bottom: none; }
+        .platform-card code {
+            background: var(--bg);
+            padding: 0.1rem 0.3rem;
+            border-radius: 3px;
+            font-size: 0.8rem;
+        }
+
+        .flow-step {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 0;
+        }
+        .flow-step .arrow { color: var(--text-secondary); font-size: 1.2rem; }
+        .flow-box {
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 0.4rem 0.8rem;
+            font-size: 0.85rem;
+        }
+        .flow-box.highlight { border-color: var(--accent); color: var(--accent); }
+
+        .check { color: var(--success); }
+
+        .error-variant {
+            display: flex;
+            gap: 0.5rem;
+            padding: 0.3rem 0;
+            font-size: 0.9rem;
+        }
+        .error-variant code {
+            color: var(--danger);
+            font-weight: 600;
+        }
+
+        .tree {
+            font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+            font-size: 0.85rem;
+            line-height: 1.8;
+            color: var(--text-secondary);
+        }
+        .tree .dir { color: var(--accent); }
+        .tree .file { color: var(--text); }
+        .tree .new { color: var(--success); }
+
+        .toc {
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .toc h3 { margin-top: 0; font-size: 1rem; }
+        .toc ul { list-style: none; }
+        .toc li { padding: 0.3rem 0; }
+        .toc a { color: var(--accent); text-decoration: none; }
+        .toc a:hover { text-decoration: underline; }
+
+        .commit-msg {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 0.5rem 0.75rem;
+            font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-top: 0.5rem;
+        }
+
+        .info-box {
+            background: #1f6feb15;
+            border: 1px solid var(--accent-dim);
+            border-radius: 8px;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+        .info-box p { margin: 0; font-size: 0.9rem; }
+
+        .warn-box {
+            background: #d2992215;
+            border: 1px solid var(--warning);
+            border-radius: 8px;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+        .warn-box p { margin: 0; font-size: 0.9rem; color: var(--warning); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Protocol Handler</h1>
+            <p class="subtitle">Implementation Plan — <span class="badge badge-rust">Rust</span> <span class="badge badge-green">Cross-Platform</span> <span class="badge badge-blue">IPC</span></p>
+        </header>
+
+        <div class="toc">
+            <h3>Table of Contents</h3>
+            <ul>
+                <li><a href="#overview">Overview & Goal</a></li>
+                <li><a href="#stats">Plan at a Glance</a></li>
+                <li><a href="#architecture">Architecture</a></li>
+                <li><a href="#dataflow">Data Flow</a></li>
+                <li><a href="#modules">Module Structure</a></li>
+                <li><a href="#types">Key Types</a></li>
+                <li><a href="#ipc">IPC Protocol</a></li>
+                <li><a href="#registration">Platform Registration</a></li>
+                <li><a href="#tasks">Task Breakdown</a></li>
+                <li><a href="#testing">Testing Strategy</a></li>
+                <li><a href="#errors">Error Types</a></li>
+            </ul>
+        </div>
+
+        <section id="overview" class="card">
+            <h2><span></span> Overview & Goal</h2>
+            <p>Build the <code>src/protocol/</code> subsystem that registers <code>tabless://</code> as a custom URL scheme on the host OS. When another app invokes <code>tabless://open?url=...</code>, the app starts (or reuses a running instance), extracts the embedded URL, validates it via <code>ValidatedUrl::parse</code>, stores it in SQLite via <code>Storage::urls::insert</code>, and exits silently.</p>
+            <div class="info-box">
+                <p><strong>Single-instance behaviour:</strong> The first instance binds an IPC socket and blocks accepting URLs. Subsequent instances connect, send the URL, and exit immediately. No duplicate databases, no race conditions.</p>
+            </div>
+        </section>
+
+        <section id="stats" class="card">
+            <h2><span></span> Plan at a Glance</h2>
+            <div class="grid-2">
+                <div class="grid-3">
+                    <div class="stat-box">
+                        <div class="number">11</div>
+                        <div class="label">Tasks</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="number">6</div>
+                        <div class="label">New Files</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="number">2</div>
+                        <div class="label">Modified Files</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="number">3</div>
+                        <div class="label">Platforms</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="number">1</div>
+                        <div class="label">New Crate</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="number">1</div>
+                        <div class="label">Integration Test</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="architecture" class="card">
+            <h2><span></span> Architecture</h2>
+            <div class="mermaid">
+                <pre style="text-align:center;">
+  +-------------------+     +-------------------+     +-------------------+
+  |   Another App     |     |   tabless binary  |     |   tabless binary  |
+  |  (already running)  |     |  (first instance)  |     | (second instance) |
+  +---------+---------+     +---------+---------+     +---------+---------+
+            |                           |                           |
+            | tabless://open?url=...    |                           |
+            +--------------------------->+                           |
+            |                           | 1. Parse protocol URL       |
+            |                           | 2. Validate URL           |
+            |                           | 3. Store in SQLite        |
+            |                           | 4. Bind IPC socket        |
+            |                           | 5. Block accepting URLs   |
+            |                           |                           |
+            |                           | <--------+                |
+            |                           |   accept_url()            |
+            |                           |   handle_url()            |
+            |                           |   store in SQLite         |
+            |                           +-------->                |
+            |                           |                           |
+            |                           |       +-------------------+
+            |                           |       | 1. Try connect    |
+            |                           |       | 2. Send URL       |
+            |                           |       | 3. Exit           |
+            |                           |       +-------------------+
+                </pre>
+            </div>
+
+            <p style="margin-top:1rem;">The protocol handler sits between the OS launcher and the existing <code>Storage</code> / <code>ValidatedUrl</code> subsystems. It does not touch the launcher module.</p>
+        </section>
+
+        <section id="dataflow" class="card">
+            <h2><span></span> Data Flow</h2>
+
+            <h3>First Instance Path</h3>
+            <div class="flow-step">
+                <div class="flow-box">OS launches tabless</div>
+                <span class="arrow">→</span>
+                <div class="flow-box">parse_protocol_url(arg)</div>
+                <span class="arrow">→</span>
+                <div class="flow-box highlight">"https://example.com"</div>
+            </div>
+            <div class="flow-step">
+                <div class="flow-box">ValidatedUrl::parse(raw)</div>
+                <span class="arrow">→</span>
+                <div class="flow-box">Storage::urls::insert()</div>
+                <span class="arrow">→</span>
+                <div class="flow-box highlight">SQLite (urls table)</div>
+            </div>
+            <div class="flow-step">
+                <div class="flow-box">IpcServer::bind(socket_path)</div>
+                <span class="arrow">→</span>
+                <div class="flow-box">Loop: accept_url() → store</div>
+            </div>
+
+            <h3>Subsequent Instance Path</h3>
+            <div class="flow-step">
+                <div class="flow-box">OS launches tabless</div>
+                <span class="arrow">→</span>
+                <div class="flow-box">IpcClient::connect(socket)</div>
+                <span class="arrow">→</span>
+                <div class="flow-box highlight">Send "URL:...\n"</div>
+                <span class="arrow">→</span>
+                <div class="flow-box">Exit silently</div>
+            </div>
+        </section>
+
+        <section id="modules" class="card">
+            <h2><span></span> Module Structure</h2>
+            <div class="tree">
+<pre>src/
+├── launcher/          <span class="comment"># existing</span>
+├── storage/           <span class="comment"># existing</span>
+├── url/               <span class="comment"># existing</span>
+├── protocol/          <span class="new"># NEW</span>
+│   ├── mod.rs         <span class="new"># ProtocolConfig, ProtocolHandler, RunOutcome</span>
+│   ├── error.rs       <span class="new"># ProtocolError enum</span>
+│   ├── parse.rs       <span class="new"># parse_protocol_url()</span>
+│   ├── ipc.rs         <span class="new"># IpcServer + IpcClient</span>
+│   ├── single_instance.rs <span class="new"># SingleInstance detection</span>
+│   └── registration.rs <span class="new"># register_protocol() per OS</span>
+├── lib.rs             <span class="mod"># add pub mod protocol;</span>
+└── main.rs            <span class="mod"># wire protocol handling</span>
+
+tests/
+└── protocol_handler.rs <span class="new"># end-to-end integration test</span>
+</pre>
+            </div>
+        </section>
+
+        <section id="types" class="card">
+            <h2><span></span> Key Types</h2>
+
+            <h3>ProtocolConfig</h3>
+            <pre><code><span class="keyword">pub struct</span> <span class="type">ProtocolConfig</span> {
+    <span class="keyword">pub</span> scheme: <span class="type">&'static str</span>,      <span class="comment">// "tabless"</span>
+    <span class="keyword">pub</span> binary_path: <span class="type">PathBuf</span>,         <span class="comment">// path to the tabless executable</span>
+    <span class="keyword">pub</span> data_dir: <span class="type">PathBuf</span>,            <span class="comment">// platform-specific data directory</span>
+}
+
+<span class="keyword">impl</span> <span class="type">ProtocolConfig</span> {
+    <span class="keyword">pub fn</span> <span class="function">socket_path</span>(&self) → <span class="type">PathBuf</span> {
+        self.data_dir.<span class="function">join</span>(<span class="string">"tabless.ipc"</span>)
+    }
+}</code></pre>
+
+            <h3>ProtocolHandler</h3>
+            <pre><code><span class="keyword">pub struct</span> <span class="type">ProtocolHandler</span> {
+    storage: <span class="type">Storage</span>,
+    config: <span class="type">ProtocolConfig</span>,
+}
+
+<span class="keyword">impl</span> <span class="type">ProtocolHandler</span> {
+    <span class="keyword">pub fn</span> <span class="function">new</span>(config: <span class="type">ProtocolConfig</span>, storage: <span class="type">Storage</span>) → <span class="type">Result</span><span class="type"><Self, ProtocolError></span>;
+    <span class="keyword">pub fn</span> <span class="function">handle_url</span>(&self, url: &str) → <span class="type">Result</span><span class="type"><(), ProtocolError></span>;
+    <span class="keyword">pub fn</span> <span class="function">run</span>(&self, protocol_url: &str) → <span class="type">Result</span><span class="type"><RunOutcome, ProtocolError></span>;
+}</code></pre>
+
+            <h3>RunOutcome</h3>
+            <pre><code><span class="keyword">pub enum</span> <span class="type">RunOutcome</span> {
+    <span class="type">FirstInstance</span>,      <span class="comment">// Server bound, waiting for URLs</span>
+    <span class="type">UrlForwarded</span>,       <span class="comment">// Connected to existing instance, sent URL, exiting</span>
+}</code></pre>
+
+            <h3>SingleInstance</h3>
+            <pre><code><span class="keyword">pub enum</span> <span class="type">SingleInstance</span> {
+    <span class="type">First</span>(<span class="type">IpcServer</span>),
+    <span class="type">Subsequent</span>(<span class="type">IpcClient</span>),
+}
+
+<span class="comment">// Try to connect first. If it works, another instance is running.</span>
+<span class="comment">// If it fails, bind a new server and become the first instance.</span></code></pre>
+        </section>
+
+        <section id="ipc" class="card">
+            <h2><span></span> IPC Protocol</h2>
+            <p>Simple line-based protocol over <code>interprocess</code> local sockets (Unix on Linux/macOS, named pipes on Windows).</p>
+
+            <pre><code><span class="comment"># Client sends one line</span>
+URL:https://example.com\n
+
+<span class="comment"># Server reads one line, strips prefix, stores URL</span>
+<span class="comment"># One URL per connection, one line per message</span></code></pre>
+
+            <pre><code><span class="comment">// IpcServer — binds socket, accepts connections</span>
+<span class="keyword">impl</span> <span class="type">IpcServer</span> {
+    <span class="keyword">pub fn</span> <span class="function">bind</span>(socket_path: &Path) → <span class="type">Result</span><span class="type"><Self, ProtocolError></span>;
+    <span class="keyword">pub fn</span> <span class="function">accept_url</span>(&self) → <span class="type">Result</span><span class="type"><String, ProtocolError></span>;
+}
+
+<span class="comment">// IpcClient — connects to existing server, sends URL</span>
+<span class="keyword">impl</span> <span class="type">IpcClient</span> {
+    <span class="keyword">pub fn</span> <span class="function">connect</span>(socket_path: &Path) → <span class="type">Result</span><span class="type"><Self, ProtocolError></span>;
+    <span class="keyword">pub fn</span> <span class="function">send_url</span>(&mut self, url: &str) → <span class="type">Result</span><span class="type"><(), ProtocolError></span>;
+}</code></pre>
+        </section>
+
+        <section id="registration" class="card">
+            <h2><span></span> Platform Registration</h2>
+            <p>Each platform registers <code>tabless://</code> differently. The <code>register-protocol</code> subcommand handles all three.</p>
+
+            <div class="grid-3">
+                <div class="platform-card">
+                    <h4></span> Linux</h4>
+                    <ul>
+                        <li>Create <code>~/.local/share/applications/tabless.desktop</code></li>
+                        <li>Set <code>MimeType=x-scheme-handler/tabless;</code></li>
+                        <li>Run <code>xdg-mime default tabless.desktop x-scheme-handler/tabless</code></li>
+                    </ul>
+                </div>
+                <div class="platform-card">
+                    <h4></span> macOS</h4>
+                    <ul>
+                        <li>Write <code>~/Applications/Tabless.app</code> bundle wrapper</li>
+                        <li>Add <code>CFBundleURLTypes</code> to <code>Info.plist</code></li>
+                        <li>Wrapper script calls the real binary</li>
+                        <li>Register via <code>lsregister -f</code></li>
+                    </ul>
+                </div>
+                <div class="platform-card">
+                    <h4></span> Windows</h4>
+                    <ul>
+                        <li>Write registry keys under <code>HKEY_CLASSES_ROOT\tabless</code></li>
+                        <li>Set <code>URL Protocol</code> value</li>
+                        <li>Set <code>shell\open\command</code> to binary path</li>
+                        <li>Use <code>reg add</code> command</li>
+                    </ul>
+                </div>
+            </div>
+
+            <pre style="margin-top:1rem;"><code><span class="comment"># Register the protocol on any platform</span>
+$ tabless register-protocol
+Protocol registered successfully.</code></pre>
+        </section>
+
+        <section id="tasks" class="card">
+            <h2><span></span> Task Breakdown</h2>
+
+            <ul class="task-list">
+                <li>
+                    <div class="task-num">1</div>
+                    <div class="task-body">
+                        <div class="task-title">Add <code>interprocess</code> dependency</div>
+                        <div class="task-meta">Add crate to Cargo.toml, verify <code>cargo check</code> passes.</div>
+                        <div class="task-files"><span class="file-tag mod">Cargo.toml</span></div>
+                        <div class="commit-msg">feat: add interprocess dependency for protocol IPC</div>
+                    </div>
+                </li>
+                <li>
+                    <div class="task-num">2</div>
+                    <div class="task-body">
+                        <div class="task-title">ProtocolError enum</div>
+                        <div class="task-meta">Define <code>ProtocolError</code> with all variants. Implement <code>Display</code> and <code>Error</code>.</div>
+                        <div class="task-files"><span class="file-tag new">src/protocol/error.rs</span></div>
+                        <div class="commit-msg">feat: add ProtocolError enum</div>
+                    </div>
+                </li>
+                <li>
+                    <div class="task-num">3</div>
+                    <div class="task-body">
+                        <div class="task-title">Parse protocol URL</div>
+                        <div class="task-meta">Implement <code>parse_protocol_url()</code> with 6 unit tests covering valid, encoded, wrong scheme, wrong path, missing param, empty param.</div>
+                        <div class="task-files"><span class="file-tag new">src/protocol/parse.rs</span></div>
+                        <div class="commit-msg">feat: add parse_protocol_url with tests</div>
+                    </div>
+                </li>
+                <li>
+                    <div class="task-num">4</div>
+                    <div class="task-body">
+                        <div class="task-title">IPC layer</div>
+                        <div class="task-meta"><code>IpcServer</code> (bind + accept_url) and <code>IpcClient</code> (connect + send_url) using <code>interprocess</code> local sockets. Roundtrip test with threads.</div>
+                        <div class="task-files"><span class="file-tag new">src/protocol/ipc.rs</span></div>
+                        <div class="commit-msg">feat: add IpcServer and IpcClient with roundtrip test</div>
+                    </div>
+                </li>
+                <li>
+                    <div class="task-num">5</div>
+                    <div class="task-body">
+                        <div class="task-title">SingleInstance detection</div>
+                        <div class="task-meta"><code>SingleInstance::new(socket_path)</code> tries connect-first; on failure binds server. Returns <code>First(IpcServer)</code> or <code>Subsequent(IpcClient)</code>.</div>
+                        <div class="task-files"><span class="file-tag new">src/protocol/single_instance.rs</span></div>
+                        <div class="commit-msg">feat: add SingleInstance detection</div>
+                    </div>
+                </li>
+                <li>
+                    <div class="task-num">6</div>
+                    <div class="task-body">
+                        <div class="task-title">Platform registration</div>
+                        <div class="task-meta"><code>register_protocol(binary_path)</code> with platform-conditional implementations for Linux (.desktop), macOS (.app bundle), and Windows (registry).</div>
+                        <div class="task-files"><span class="file-tag new">src/protocol/registration.rs</span></div>
+                        <div class="commit-msg">feat: add cross-platform protocol registration</div>
+                    </div>
+                </li>
+                <li>
+                    <div class="task-num">7</div>
+                    <div class="task-body">
+                        <div class="task-title">ProtocolHandler + mod.rs</div>
+                        <div class="task-meta">Assemble <code>ProtocolConfig</code>, <code>ProtocolHandler</code>, <code>RunOutcome</code>. Wire parse → validate → storage → IPC server loop.</div>
+                        <div class="task-files"><span class="file-tag new">src/protocol/mod.rs</span></div>
+                        <div class="commit-msg">feat: add ProtocolHandler with single-instance logic and server loop</div>
+                    </div>
+                </li>
+                <li>
+                    <div class="task-num">8</div>
+                    <div class="task-body">
+                        <div class="task-title">Wire into lib.rs</div>
+                        <div class="task-meta">Add <code>pub mod protocol;</code>. Verify compilation.</div>
+                        <div class="task-files"><span class="file-tag mod">src/lib.rs</span></div>
+                        <div class="commit-msg">feat: wire protocol module into lib.rs</div>
+                    </div>
+                </li>
+                <li>
+                    <div class="task-num">9</div>
+                    <div class="task-body">
+                        <div class="task-title">Wire into main.rs</div>
+                        <div class="task-meta">Handle <code>tabless://</code> args: check args, single instance, store URL. Add <code>register-protocol</code> subcommand.</div>
+                        <div class="task-files"><span class="file-tag mod">src/main.rs</span></div>
+                        <div class="commit-msg">feat: wire protocol handler into main.rs with register-protocol subcommand</div>
+                    </div>
+                </li>
+                <li>
+                    <div class="task-num">10</div>
+                    <div class="task-body">
+                        <div class="task-title">Integration test</div>
+                        <div class="task-meta">End-to-end test: spawn server thread, store first URL, connect client, forward second URL, verify both URLs in SQLite.</div>
+                        <div class="task-files"><span class="file-tag new">tests/protocol_handler.rs</span></div>
+                        <div class="commit-msg">test: add end-to-end protocol handler integration test</div>
+                    </div>
+                </li>
+                <li>
+                    <div class="task-num">11</div>
+                    <div class="task-body">
+                        <div class="task-title">Final verification</div>
+                        <div class="task-meta">Run full test suite <code>cargo test</code>, then <code>cargo clippy --all-targets -- -D warnings</code>. Fix any warnings.</div>
+                        <div class="commit-msg">fix: address clippy warnings in protocol module</div>
+                    </div>
+                </li>
+            </ul>
+        </section>
+
+        <section id="testing" class="card">
+            <h2><span></span> Testing Strategy</h2>
+
+            <h3>Unit Tests (per module)</h3>
+            <ul style="margin-left:1.5rem; color: var(--text-secondary);">
+                <li><code>parse.rs</code>: 6 tests — valid, encoded, wrong scheme, wrong path, missing param, empty param</li>
+                <li><code>ipc.rs</code>: roundtrip test — server thread + client send + assert received URL matches</li>
+            </ul>
+
+            <h3>Integration Test</h3>
+            <ul style="margin-left:1.5rem; color: var(--text-secondary);">
+                <li>Spawn server thread: bind IPC socket, store first URL via <code>Storage</code>, accept one forwarded URL, store it too</li>
+                <li>Connect client, send second URL, exit</li>
+                <li>Verify both URLs exist in in-memory SQLite database</li>
+            </ul>
+
+            <div class="warn-box">
+                <p><strong>Note on blocking tests:</strong> The integration test uses a bounded server (accepts exactly one forwarded URL then exits). The production <code>ProtocolHandler::run_server</code> loops forever. Do not test the infinite loop directly — test the components that compose it.</p>
+            </div>
+        </section>
+
+        <section id="errors" class="card">
+            <h2><span></span> Error Types</h2>
+
+            <p style="margin-bottom:1rem;">Every failure path returns a typed <code>ProtocolError</code>. No panics, no unwraps in production code.</p>
+
+            <div class="error-variant"><code>InvalidUrl { reason: String }</code> — Malformed protocol URL, wrong scheme/path, missing query param</div>
+            <div class="error-variant"><code>UrlValidationFailed { source: UrlValidationError }</code> — Embedded URL rejected by ValidatedUrl</div>
+            <div class="error-variant"><code>StorageFailed { source: StorageError }</code> — SQLite insert failed</div>
+            <div class="error-variant"><code>IpcBindFailed { reason: String }</code> — Could not bind local socket</div>
+            <div class="error-variant"><code>IpcConnectFailed { reason: String }</code> — Could not connect to existing instance</div>
+            <div class="error-variant"><code>RegistrationFailed { platform: String, reason: String }</code> — OS registration command failed</div>
+            <div class="error-variant"><code>AlreadyRegistered</code> — Protocol already registered on this system</div>
+        </section>
+
+        <section class="card">
+            <h2><span></span> Spec Coverage</h2>
+            <div class="grid-2">
+                <div>
+                    <h3>Implemented</h3>
+                    <ul style="list-style:none; color: var(--text-secondary);">
+                        <li><span class="check">✓</span> ProtocolError enum</li>
+                        <li><span class="check">✓</span> parse_protocol_url</li>
+                        <li><span class="check">✓</span> IpcServer / IpcClient</li>
+                        <li><span class="check">✓</span> SingleInstance detection</li>
+                        <li><span class="check">✓</span> Platform registration</li>
+                        <li><span class="check">✓</span> ProtocolConfig / ProtocolHandler / RunOutcome</li>
+                        <li><span class="check">✓</span> Wired into lib.rs + main.rs</li>
+                        <li><span class="check">✓</span> Integration test</li>
+                    </ul>
+                </div>
+                <div>
+                    <h3>Dependencies Added</h3>
+                    <ul style="list-style:none; color: var(--text-secondary);">
+                        <li><span class="check">✓</span> <code>interprocess = "2"</code> — Cross-platform local sockets</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <footer style="text-align:center; color: var(--text-secondary); font-size: 0.85rem; margin-top: 2rem;">
+            <p>Protocol Handler Implementation Plan — tabless</p>
+            <p>Generated from <code>docs/superpowers/plans/2026-05-27-protocol-handler.md</code></p>
+        </footer>
+    </div>
+</body>
+</html>
