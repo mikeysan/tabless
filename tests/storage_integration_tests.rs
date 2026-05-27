@@ -275,3 +275,23 @@ fn storage_open_in_memory() {
     let found = storage.urls().find_by_id(id).unwrap();
     assert!(found.is_some());
 }
+
+use tabless::storage::search::FuzzySearchIndex;
+
+#[test]
+fn fuzzy_search_finds_match() {
+    let conn = setup();
+    let repo = UrlRepository::new(&conn);
+    let url1 = ValidatedUrl::parse("https://rust-lang.org").unwrap();
+    let url2 = ValidatedUrl::parse("https://example.com").unwrap();
+
+    repo.insert(&url1, Some("Rust Language")).unwrap();
+    repo.insert(&url2, Some("Example")).unwrap();
+
+    let mut index = FuzzySearchIndex::new();
+    index.rebuild(&repo).unwrap();
+
+    let results = index.search("rust");
+    assert!(!results.is_empty());
+    assert_eq!(results[0].text, "https://rust-lang.org/");
+}
