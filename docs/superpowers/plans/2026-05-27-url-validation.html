@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>URL Validation Subsystem — Implementation Plan</title>
+    <style>
+        :root {
+            --bg: #0d1117;
+            --surface: #161b22;
+            --surface-hover: #1c2128;
+            --border: #30363d;
+            --text: #c9d1d9;
+            --text-muted: #8b949e;
+            --accent: #58a6ff;
+            --accent-dim: #388bfd;
+            --success: #3fb950;
+            --warning: #d29922;
+            --danger: #f85149;
+            --code-bg: #1e2530;
+            --keyword: #ff7b72;
+            --string: #a5d6ff;
+            --type: #ffa657;
+            --function: #d2a8ff;
+            --comment: #8b949e;
+            --number: #79c0ff;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+        }
+        .container { max-width: 1100px; margin: 0 auto; padding: 2rem; }
+        header {
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        h1 { font-size: 2rem; margin: 0 0 0.5rem; color: #f0f6fc; }
+        .subtitle { color: var(--text-muted); font-size: 1.1rem; }
+        .badge {
+            display: inline-block;
+            padding: 0.2rem 0.6rem;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-right: 0.5rem;
+        }
+        .badge-rust { background: #b7410e33; color: #ffa657; border: 1px solid #b7410e55; }
+        .badge-tdd { background: #23863633; color: #3fb950; border: 1px solid #23863655; }
+        .badge-mvp { background: #1f6feb33; color: #58a6ff; border: 1px solid #1f6feb55; }
+        h2 { color: #f0f6fc; margin-top: 2.5rem; font-size: 1.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
+        h3 { color: var(--accent); margin-top: 2rem; font-size: 1.2rem; }
+        h4 { color: var(--text); margin-top: 1.5rem; font-size: 1rem; }
+        .callout {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-left: 4px solid var(--accent);
+            padding: 1rem 1.25rem;
+            border-radius: 6px;
+            margin: 1rem 0;
+        }
+        .callout-success { border-left-color: var(--success); }
+        .callout-warning { border-left-color: var(--warning); }
+        .callout-danger { border-left-color: var(--danger); }
+        pre {
+            background: var(--code-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.25rem;
+            overflow-x: auto;
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Fira Code', monospace;
+            font-size: 0.85rem;
+            line-height: 1.5;
+        }
+        code {
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Fira Code', monospace;
+            font-size: 0.9em;
+            background: var(--code-bg);
+            padding: 0.15rem 0.35rem;
+            border-radius: 4px;
+        }
+        pre code { background: none; padding: 0; font-size: 0.85rem; }
+        .keyword { color: var(--keyword); }
+        .string { color: var(--string); }
+        .type { color: var(--type); }
+        .function { color: var(--function); }
+        .comment { color: var(--comment); font-style: italic; }
+        .number { color: var(--number); }
+        .file-tree {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.25rem;
+            font-family: 'SF Mono', monospace;
+            font-size: 0.9rem;
+            line-height: 1.8;
+        }
+        .file-tree .dir { color: var(--accent); font-weight: 600; }
+        .file-tree .file { color: var(--text); }
+        .file-tree .comment-inline { color: var(--comment); margin-left: 1rem; }
+        .task-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+        }
+        .task-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+        .task-number {
+            background: var(--accent);
+            color: #0d1117;
+            width: 2rem;
+            height: 2rem;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.9rem;
+            flex-shrink: 0;
+        }
+        .task-title { font-size: 1.15rem; font-weight: 600; color: #f0f6fc; }
+        .step-list { list-style: none; padding: 0; margin: 0; }
+        .step-list li {
+            padding: 0.6rem 0;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+        }
+        .step-list li:last-child { border-bottom: none; }
+        .step-check {
+            width: 1.25rem;
+            height: 1.25rem;
+            border: 2px solid var(--border);
+            border-radius: 4px;
+            flex-shrink: 0;
+            margin-top: 0.1rem;
+        }
+        .diagram {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.5rem;
+            text-align: center;
+            font-family: 'SF Mono', monospace;
+            font-size: 0.9rem;
+            line-height: 2;
+            overflow-x: auto;
+        }
+        .diagram .arrow { color: var(--accent); }
+        .diagram .box {
+            display: inline-block;
+            background: var(--code-bg);
+            border: 1px solid var(--border);
+            padding: 0.3rem 0.8rem;
+            border-radius: 4px;
+        }
+        .diagram .box-output { background: #23863622; border-color: var(--success); }
+        .diagram .box-error { background: #f8514922; border-color: var(--danger); }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            font-size: 0.9rem;
+        }
+        th, td {
+            text-align: left;
+            padding: 0.75rem;
+            border-bottom: 1px solid var(--border);
+        }
+        th { color: var(--text-muted); font-weight: 500; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
+        tr:hover { background: var(--surface-hover); }
+        .status-ok { color: var(--success); font-weight: 600; }
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+        }
+        @media (max-width: 768px) {
+            .grid-2 { grid-template-columns: 1fr; }
+            .container { padding: 1rem; }
+        }
+        .api-block {
+            background: var(--code-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.25rem;
+            margin: 1rem 0;
+        }
+        .api-sig {
+            font-family: 'SF Mono', monospace;
+            font-size: 0.9rem;
+            color: var(--text);
+            margin: 0.5rem 0;
+        }
+        .api-sig .kw { color: var(--keyword); }
+        .api-sig .ty { color: var(--type); }
+        .api-sig .fn { color: var(--function); }
+        .api-sig .str { color: var(--string); }
+        footer {
+            margin-top: 3rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border);
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>URL Validation Subsystem</h1>
+            <div class="subtitle">Implementation Plan — 2026-05-27</div>
+            <div style="margin-top: 0.75rem;">
+                <span class="badge badge-rust">Rust</span>
+                <span class="badge badge-tdd">TDD</span>
+                <span class="badge badge-mvp">MVP</span>
+            </div>
+        </header>
+
+        <section>
+            <h2>Overview</h2>
+            <p>The URL validation subsystem is the first line of defense. It receives untrusted URL strings from OS protocol handlers, UI paste operations, and future import flows, and transforms them into a strongly-typed, canonicalised, validated representation.</p>
+
+            <div class="callout callout-success">
+                <strong>Goal:</strong> Build a strict URL validation module that parses raw strings into a strongly-typed <code>ValidatedUrl</code>, enforcing scheme allowlists, host validation, and canonicalisation.
+            </div>
+
+            <div class="callout">
+                <strong>Architecture:</strong> Wrap the <code>url</code> crate in a custom <code>ValidatedUrl</code> struct. Split concerns across focused modules: errors, parsing, normalisation. TDD throughout — write failing tests first, then minimal implementation.
+            </div>
+        </section>
+
+        <section>
+            <h2>Data Flow</h2>
+            <div class="diagram">
+                <div class="box">Raw URL String</div><br>
+                <span class="arrow">&darr;</span><br>
+                <div class="box"><code>ValidatedUrl::parse(input)</code></div><br>
+                <span class="arrow">&darr;</span><br>
+                <div class="box"><code>url::Url::parse(input)</code></div><br>
+                <span class="arrow">&darr;</span><br>
+                <div class="box">Scheme allowlist check</div><br>
+                <span class="arrow">&darr;</span><br>
+                <div class="box">Host validation</div><br>
+                <span class="arrow">&darr;</span><br>
+                <div class="box">Normaliser: lowercase hostname</div><br>
+                <span class="arrow">&darr;</span><br>
+                <div class="box box-output"><code>ValidatedUrl { original, canonical }</code></div><br>
+                <div style="margin-top: 1rem; color: var(--danger);">
+                    <span class="arrow">&darr; (on failure)</span><br>
+                    <div class="box box-error"><code>UrlValidationError</code></div>
+                </div>
+            </div>
+        </section>
+
+        <section>
+            <h2>File Structure</h2>
+            <div class="file-tree">
+<span class="dir">.</span>
+<br>├── Cargo.toml
+<br>├── <span class="dir">src</span>
+<br>│   ├── main.rs              <span class="comment-inline">// application entry point</span>
+<br>│   ├── lib.rs               <span class="comment-inline">// library root, re-exports</span>
+<br>│   └── <span class="dir">url</span>
+<br>│       ├── mod.rs           <span class="comment-inline">// public API: ValidatedUrl, UrlValidationError</span>
+<br>│       ├── error.rs         <span class="comment-inline">// error enum definitions</span>
+<br>│       ├── parser.rs        <span class="comment-inline">// wrapping url::Url, enforces allowlist</span>
+<br>│       └── normalizer.rs    <span class="comment-inline">// canonicalisation: lowercase hostnames</span>
+<br>└── <span class="dir">tests</span>
+<br>    └── url_integration_tests.rs  <span class="comment-inline">// integration tests for public API boundary</span>
+            </div>
+        </section>
+
+        <section>
+            <h2>Public API</h2>
+            <div class="api-block">
+                <div class="api-sig">
+                    <span class="kw">pub struct</span> <span class="ty">ValidatedUrl</span> {
+                </div>
+                <div class="api-sig" style="padding-left: 1.5rem;">
+                    original: <span class="ty">String</span>,<br>
+                    canonical: <span class="ty">Url</span>,
+                </div>
+                <div class="api-sig">}</div>
+
+                <hr style="border: none; border-top: 1px solid var(--border); margin: 1rem 0;">
+
+                <div class="api-sig">
+                    <span class="kw">impl</span> <span class="ty">ValidatedUrl</span> {
+                </div>
+                <div class="api-sig" style="padding-left: 1.5rem;">
+                    <span class="kw">pub fn</span> <span class="fn">parse</span>(input: &<span class="ty">str</span>) -> <span class="ty">Result</span><<span class="ty">Self</span>, <span class="ty">UrlValidationError</span>>;
+                </div>
+                <div class="api-sig" style="padding-left: 1.5rem;">
+                    <span class="kw">pub fn</span> <span class="fn">original</span>(&self) -> &<span class="ty">str</span>;
+                </div>
+                <div class="api-sig" style="padding-left: 1.5rem;">
+                    <span class="kw">pub fn</span> <span class="fn">canonical</span>(&self) -> &<span class="ty">str</span>;
+                </div>
+                <div class="api-sig" style="padding-left: 1.5rem;">
+                    <span class="kw">pub fn</span> <span class="fn">scheme</span>(&self) -> &<span class="ty">str</span>;
+                </div>
+                <div class="api-sig" style="padding-left: 1.5rem;">
+                    <span class="kw">pub fn</span> <span class="fn">host</span>(&self) -> &<span class="ty">str</span>;
+                </div>
+                <div class="api-sig">}</div>
+            </div>
+        </section>
+
+        <section>
+            <h2>Error Types</h2>
+            <pre><code><span class="keyword">#[derive</span>(Debug, Clone, PartialEq)]<span class="keyword">pub enum</span> <span class="type">UrlValidationError</span> {
+    EmptyInput,
+    InvalidScheme { found: <span class="type">String</span> },
+    MalformedUrl { reason: <span class="type">String</span> },
+    EmptyHost,
+    InvalidPort { port: <span class="type">u16</span> },
+}</code></pre>
+
+            <table>
+                <thead>
+                    <tr><th>Variant</th><th>Triggers When</th><th>User Message</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td><code>EmptyInput</code></td><td>Input string is empty</td><td>"URL input is empty"</td></tr>
+                    <tr><td><code>InvalidScheme</code></td><td>Scheme is not <code>http</code> or <code>https</code></td><td>"invalid URL scheme: {found}"</td></tr>
+                    <tr><td><code>MalformedUrl</code></td><td><code>url::Url::parse</code> fails</td><td>"malformed URL: {reason}"</td></tr>
+                    <tr><td><code>EmptyHost</code></td><td>No host present in parsed URL</td><td>"URL has no host"</td></tr>
+                    <tr><td><code>InvalidPort</code></td><td>Port number out of range</td><td>"invalid port number: {port}"</td></tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section>
+            <h2>Implementation Tasks</h2>
+
+            <!-- TASK 1 -->
+            <div class="task-card">
+                <div class="task-header">
+                    <div class="task-number">1</div>
+                    <div class="task-title">Project Scaffold</div>
+                </div>
+                <p>Set up the Rust project with dependencies and minimal entry points.</p>
+                <ul class="step-list">
+                    <li><div class="step-check"></div><div>Create <code>Cargo.toml</code> with <code>url = "2.5"</code> dependency</div></li>
+                    <li><div class="step-check"></div><div>Create <code>src/main.rs</code> with placeholder <code>main()</code></div></li>
+                    <li><div class="step-check"></div><div>Create <code>src/lib.rs</code> declaring <code>pub mod url;</code></div></li>
+                    <li><div class="step-check"></div><div>Run <code>cargo check</code> — verify compilation</div></li>
+                    <li><div class="step-check"></div><div>Commit: <code>chore: scaffold Rust project</code></div></li>
+                </ul>
+            </div>
+
+            <!-- TASK 2 -->
+            <div class="task-card">
+                <div class="task-header">
+                    <div class="task-number">2</div>
+                    <div class="task-title">Define Error Types</div>
+                </div>
+                <p>Build the <code>UrlValidationError</code> enum with <code>Display</code> and <code>std::error::Error</code> implementations.</p>
+                <ul class="step-list">
+                    <li><div class="step-check"></div><div>Write failing test for <code>UrlValidationError</code> existence</div></li>
+                    <li><div class="step-check"></div><div>Implement <code>src/url/error.rs</code> with all variants</div></li>
+                    <li><div class="step-check"></div><div>Wire up <code>src/url/mod.rs</code> to re-export</div></li>
+                    <li><div class="step-check"></div><div>Run tests — verify they pass</div></li>
+                    <li><div class="step-check"></div><div>Commit: <code>feat: define UrlValidationError enum</code></div></li>
+                </ul>
+
+                <pre><code><span class="keyword">#[derive</span>(Debug, Clone, PartialEq)]
+<span class="keyword">pub enum</span> <span class="type">UrlValidationError</span> {
+    EmptyInput,
+    InvalidScheme { found: <span class="type">String</span> },
+    MalformedUrl { reason: <span class="type">String</span> },
+    EmptyHost,
+    InvalidPort { port: <span class="type">u16</span> },
+}
+
+<span class="keyword">impl</span> std::fmt::Display <span class="keyword">for</span> <span class="type">UrlValidationError</span> {
+    <span class="keyword">fn</span> <span class="function">fmt</span>(&self, f: <span class="keyword">&mut</span> std::fmt::Formatter<span class="keyword"><'_></span>) -> std::fmt::Result {
+        <span class="keyword">match</span> self {
+            <span class="type">UrlValidationError</span>::EmptyInput => <span class="function">write!</span>(f, <span class="string">"URL input is empty"</span>),
+            <span class="type">UrlValidationError</span>::InvalidScheme { found } => {
+                <span class="function">write!</span>(f, <span class="string">"invalid URL scheme: {}"</span>, found)
+            }
+            <span class="comment">// ... other variants</span>
+        }
+    }
+}</code></pre>
+            </div>
+
+            <!-- TASK 3 -->
+            <div class="task-card">
+                <div class="task-header">
+                    <div class="task-number">3</div>
+                    <div class="task-title">Implement Normalizer</div>
+                </div>
+                <p>Build the canonicalisation logic: lowercase hostnames, preserve everything else.</p>
+                <ul class="step-list">
+                    <li><div class="step-check"></div><div>Write failing test for hostname lowercasing</div></li>
+                    <li><div class="step-check"></div><div>Implement <code>src/url/normalizer.rs</code> with <code>normalize()</code> function</div></li>
+                    <li><div class="step-check"></div><div>Wire up module in <code>src/url/mod.rs</code></div></li>
+                    <li><div class="step-check"></div><div>Run tests — verify they pass</div></li>
+                    <li><div class="step-check"></div><div>Commit: <code>feat: add URL normalizer with hostname lowercasing</code></div></li>
+                </ul>
+
+                <pre><code><span class="keyword">pub fn</span> <span class="function">normalize</span>(url: <span class="keyword">&</span><span class="type">Url</span>) -> <span class="type">Url</span> {
+    <span class="keyword">let</span> <span class="keyword">mut</span> normalized = url.<span class="function">clone</span>();
+    <span class="keyword">if</span> <span class="keyword">let</span> <span class="type">Some</span>(host) = normalized.<span class="function">host_str</span>() {
+        <span class="keyword">let</span> lower = host.<span class="function">to_lowercase</span>();
+        <span class="keyword">if</span> host != lower {
+            <span class="keyword">let</span> _ = normalized.<span class="function">set_host</span>(<span class="type">Some</span>(&lower));
+        }
+    }
+    normalized
+}</code></pre>
+            </div>
+
+            <!-- TASK 4 -->
+            <div class="task-card">
+                <div class="task-header">
+                    <div class="task-number">4</div>
+                    <div class="task-title">Implement Parser and ValidatedUrl</div>
+                </div>
+                <p>Build the core <code>ValidatedUrl</code> struct and <code>parse()</code> logic with full integration test coverage.</p>
+                <ul class="step-list">
+                    <li><div class="step-check"></div><div>Write 8 failing integration tests covering: valid <code>http</code>/<code>https</code>, empty input, invalid scheme, malformed URL, hostname lowercasing, original preservation</div></li>
+                    <li><div class="step-check"></div><div>Implement <code>src/url/parser.rs</code> with <code>ValidatedUrl</code> struct</div></li>
+                    <li><div class="step-check"></div><div>Wire up <code>src/url/mod.rs</code> to re-export</div></li>
+                    <li><div class="step-check"></div><div>Run all integration tests — verify 8/8 pass</div></li>
+                    <li><div class="step-check"></div><div>Commit: <code>feat: implement ValidatedUrl parser with scheme allowlisting</code></div></li>
+                </ul>
+
+                <pre><code><span class="keyword">impl</span> <span class="type">ValidatedUrl</span> {
+    <span class="keyword">pub fn</span> <span class="function">parse</span>(input: <span class="keyword">&</span><span class="type">str</span>) -> <span class="type">Result</span><<span class="type">Self</span>, <span class="type">UrlValidationError</span>> {
+        <span class="keyword">if</span> input.<span class="function">is_empty</span>() {
+            <span class="keyword">return</span> <span class="type">Err</span>(<span class="type">UrlValidationError</span>::EmptyInput);
+        }
+
+        <span class="keyword">let</span> parsed = <span class="type">Url</span>::parse(input)
+            .map_err(|e| <span class="type">UrlValidationError</span>::MalformedUrl {
+                reason: e.<span class="function">to_string</span>(),
+            })?;
+
+        <span class="keyword">let</span> scheme = parsed.scheme();
+        <span class="keyword">if</span> scheme != <span class="string">"http"</span> && scheme != <span class="string">"https"</span> {
+            <span class="keyword">return</span> <span class="type">Err</span>(<span class="type">UrlValidationError</span>::InvalidScheme {
+                found: scheme.<span class="function">to_string</span>(),
+            });
+        }
+
+        <span class="keyword">if</span> parsed.<span class="function">host_str</span>().is_none() {
+            <span class="keyword">return</span> <span class="type">Err</span>(<span class="type">UrlValidationError</span>::EmptyHost);
+        }
+
+        <span class="keyword">let</span> canonical = normalize(&parsed);
+
+        <span class="type">Ok</span>(<span class="type">ValidatedUrl</span> {
+            original: input.<span class="function">to_string</span>(),
+            canonical,
+        })
+    }
+}</code></pre>
+            </div>
+
+            <!-- TASK 5 -->
+            <div class="task-card">
+                <div class="task-header">
+                    <div class="task-number">5</div>
+                    <div class="task-title">Add Unit Tests for Edge Cases</div>
+                </div>
+                <p>Expand test coverage with edge cases: punycode, percent-encoding, custom ports, missing hosts, and more.</p>
+                <ul class="step-list">
+                    <li><div class="step-check"></div><div>Add unit tests to <code>src/url/parser.rs</code> (<code>#[cfg(test)]</code>)</div></li>
+                    <li><div class="step-check"></div><div>Add unit tests to <code>src/url/normalizer.rs</code> (<code>#[cfg(test)]</code>)</div></li>
+                    <li><div class="step-check"></div><div>Run <code>cargo test</code> — all unit + integration tests pass</div></li>
+                    <li><div class="step-check"></div><div>Commit: <code>test: add edge-case unit tests for parser and normalizer</code></div></li>
+                </ul>
+
+                <div class="grid-2">
+                    <div>
+                        <strong>Parser Tests</strong>
+                        <ul>
+                            <li><code>https</code> with path + query</li>
+                            <li>Reject <code>data:</code> scheme</li>
+                            <li>Reject <code>about:</code> scheme</li>
+                            <li>Accept punycode hostname</li>
+                            <li>Preserve percent-encoding</li>
+                            <li>Reject missing host</li>
+                            <li>Accept custom port (8080)</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <strong>Normalizer Tests</strong>
+                        <ul>
+                            <li>Already lowercase = noop</li>
+                            <li>Uppercase host → lowercase</li>
+                            <li>Mixed-case host → lowercase</li>
+                            <li>Path + query preserved</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TASK 6 -->
+            <div class="task-card">
+                <div class="task-header">
+                    <div class="task-number">6</div>
+                    <div class="task-title">Final Verification</div>
+                </div>
+                <p>Run the full quality gate before marking the subsystem complete.</p>
+                <ul class="step-list">
+                    <li><div class="step-check"></div><div>Run <code>cargo test</code> — all tests pass</div></li>
+                    <li><div class="step-check"></div><div>Run <code>cargo clippy -- -D warnings</code> — no warnings</div></li>
+                    <li><div class="step-check"></div><div>Run <code>cargo fmt</code> — formatting clean</div></li>
+                    <li><div class="step-check"></div><div>Run <code>cargo build --release</code> — release compiles</div></li>
+                    <li><div class="step-check"></div><div>Commit: <code>chore: final verification and formatting</code></div></li>
+                </ul>
+            </div>
+        </section>
+
+        <section>
+            <h2>Spec Coverage Check</h2>
+            <table>
+                <thead>
+                    <tr><th>Spec Requirement</th><th>Task</th><th>Status</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>Parse raw URL strings safely</td><td>Task 4</td><td class="status-ok">Covered</td></tr>
+                    <tr><td>Scheme allowlist (<code>http</code>, <code>https</code>)</td><td>Task 4</td><td class="status-ok">Covered</td></tr>
+                    <tr><td>Reject malformed input</td><td>Task 4, 5</td><td class="status-ok">Covered</td></tr>
+                    <tr><td>Canonical form for deduplication</td><td>Task 3</td><td class="status-ok">Covered</td></tr>
+                    <tr><td>Preserve original input</td><td>Task 4</td><td class="status-ok">Covered</td></tr>
+                    <tr><td>Fine-grained typed errors</td><td>Task 2, 4</td><td class="status-ok">Covered</td></tr>
+                    <tr><td>Zero panics/unwraps in production</td><td>All tasks</td><td class="status-ok">Covered</td></tr>
+                    <tr><td>No tracking parameter stripping</td><td>N/A (deferred)</td><td class="status-ok">Correctly excluded</td></tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section>
+            <h2>Execution Options</h2>
+            <div class="grid-2">
+                <div class="callout">
+                    <strong>Option 1: Subagent-Driven (Recommended)</strong><br><br>
+                    Dispatch a fresh subagent per task. Review between tasks. Fast iteration, isolated context per step.
+                </div>
+                <div class="callout callout-warning">
+                    <strong>Option 2: Inline Execution</strong><br><br>
+                    Execute tasks in this session using <code>executing-plans</code>. Batch execution with checkpoints for review.
+                </div>
+            </div>
+        </section>
+
+        <footer>
+            Plan generated 2026-05-27 &middot; Based on spec: <code>docs/superpowers/specs/2026-05-27-url-validation-design.md</code>
+        </footer>
+    </div>
+</body>
+</html>
