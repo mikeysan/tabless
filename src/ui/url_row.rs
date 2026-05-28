@@ -75,17 +75,17 @@ pub fn url_row(
                         );
 
                         if show {
-                            if ui.button("A").on_hover_text("Archive").clicked() {
-                                action = Some(ViewAction::Archive(record.id));
-                            }
-                            if ui.button("P").on_hover_text("Pin").clicked() {
-                                action = Some(ViewAction::Pin(record.id));
+                            if ui.button("D").on_hover_text("Delete").clicked() {
+                                action = Some(ViewAction::Delete(record.id));
                             }
                             if ui.button("L").on_hover_text("Launch").clicked() {
                                 action = Some(ViewAction::Launch(record.id));
                             }
-                            if ui.button("D").on_hover_text("Delete").clicked() {
-                                action = Some(ViewAction::Delete(record.id));
+                            if ui.button("P").on_hover_text("Pin").clicked() {
+                                action = Some(ViewAction::Pin(record.id));
+                            }
+                            if ui.button("A").on_hover_text("Archive").clicked() {
+                                action = Some(ViewAction::Archive(record.id));
                             }
                         }
                     });
