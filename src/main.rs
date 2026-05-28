@@ -47,13 +47,16 @@ fn spawn_ipc_server(
         loop {
             match server.accept_url() {
                 Ok(url) => {
-                    if shutdown_clone.load(Ordering::Relaxed) {
+                    if url == "tabless://shutdown" {
                         break;
                     }
                     if let Err(e) = handler.handle_url(&url) {
                         log::error!("IPC handle error: {}", e);
                     }
                     let _ = tx.send(());
+                    if shutdown_clone.load(Ordering::Relaxed) {
+                        break;
+                    }
                 }
                 Err(e) => {
                     log::warn!("IPC accept error: {}", e);
@@ -66,8 +69,8 @@ fn spawn_ipc_server(
 
 /// Shut down the IPC server thread gracefully.
 ///
-/// Connecting to the socket is only done to unblock the server's blocking
-/// `accept()` call; the URL content is irrelevant and never processed.
+/// Connecting to the socket sends a sentinel URL to unblock the server's
+/// blocking `accept()` call. The sentinel is not forwarded to the protocol handler.
 fn shutdown_ipc(
     shutdown: &AtomicBool,
     socket_path: &std::path::Path,
