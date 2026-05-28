@@ -97,6 +97,11 @@ impl App for TablessApp {
             if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
                 self.inbox_state.search_query.clear();
                 self.inbox_state.selected_index = 0;
+                self.inbox_state.search_focused = false;
+            }
+
+            if ctx.input(|i| i.key_pressed(egui::Key::Slash)) {
+                self.inbox_state.search_focused = true;
             }
 
             actions

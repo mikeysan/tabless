@@ -5,6 +5,7 @@ use crate::ui::ViewAction;
 pub struct InboxState {
     pub selected_index: usize,
     pub search_query: String,
+    pub search_focused: bool,
 }
 
 impl Default for InboxState {
@@ -18,6 +19,7 @@ impl InboxState {
         InboxState {
             selected_index: 0,
             search_query: String::new(),
+            search_focused: false,
         }
     }
 
@@ -68,6 +70,10 @@ pub fn inbox_view(
     ui.horizontal(|ui| {
         ui.label("Search:");
         let response = ui.text_edit_singleline(&mut state.search_query);
+        if state.search_focused {
+            response.request_focus();
+            state.search_focused = false;
+        }
         if response.changed() {
             state.selected_index = 0;
         }

@@ -38,6 +38,7 @@ fn main() {
 
         match handler.run(url) {
             Ok(RunOutcome::FirstInstance) => {
+                // TODO: spawn GUI before starting server loop (requires IPC server on background thread)
                 // Server loop blocks until interrupted
             }
             Ok(RunOutcome::UrlForwarded) => {
