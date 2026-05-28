@@ -28,3 +28,14 @@ pub use macos::MacBrowser as DefaultPlatform;
 
 #[cfg(target_os = "windows")]
 pub use windows::WindowsBrowser as DefaultPlatform;
+
+pub trait UrlLauncher: Send + Sync {
+    fn launch(&self, url: &str) -> Result<(), LaunchError>;
+}
+
+impl<P: PlatformBrowser> UrlLauncher for Launcher<P> {
+    fn launch(&self, url: &str) -> Result<(), LaunchError> {
+        let _child = self.launch(url)?;
+        Ok(())
+    }
+}
