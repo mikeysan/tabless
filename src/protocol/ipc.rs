@@ -18,7 +18,9 @@ pub struct IpcServer {
 #[cfg(unix)]
 impl Drop for IpcServer {
     fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.socket_path);
+        if let Err(e) = std::fs::remove_file(&self.socket_path) {
+            log::warn!("Failed to remove IPC socket: {}", e);
+        }
     }
 }
 

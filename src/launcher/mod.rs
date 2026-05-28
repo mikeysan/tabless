@@ -39,7 +39,9 @@ impl<P: PlatformBrowser> UrlLauncher for Launcher<P> {
     fn launch(&self, url: &str) -> Result<(), LaunchError> {
         let mut child = self.launch(url)?;
         std::thread::spawn(move || {
-            let _ = child.wait();
+            if let Err(e) = child.wait() {
+                log::warn!("Browser process wait failed: {}", e);
+            }
         });
         Ok(())
     }

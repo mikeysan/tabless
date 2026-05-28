@@ -1,4 +1,7 @@
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tabless::launcher::{DefaultPlatform, Launcher, PlatformBrowser, UrlLauncher};
+use tabless::protocol::ipc::IpcClient;
 
 fn build_launcher() -> Option<Box<dyn UrlLauncher>> {
     let platform = DefaultPlatform::new();
@@ -23,8 +26,10 @@ fn spawn_ipc_server(
     config: tabless::protocol::ProtocolConfig,
     server: tabless::protocol::ipc::IpcServer,
     tx: std::sync::mpsc::Sender<()>,
-) {
-    std::thread::spawn(move || {
+) -> (std::thread::JoinHandle<()>, Arc<AtomicBool>) {
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let shutdown_clone = Arc::clone(&shutdown);
+    let handle = std::thread::spawn(move || {
         let storage = match tabless::storage::Storage::open(&db_path) {
             Ok(s) => s,
             Err(e) => {
@@ -42,6 +47,9 @@ fn spawn_ipc_server(
         loop {
             match server.accept_url() {
                 Ok(url) => {
+                    if shutdown_clone.load(Ordering::Relaxed) {
+                        break;
+                    }
                     if let Err(e) = handler.handle_url(&url) {
                         log::error!("IPC handle error: {}", e);
                     }
@@ -53,6 +61,7 @@ fn spawn_ipc_server(
             }
         }
     });
+    (handle, shutdown)
 }
 
 fn run_gui(storage: tabless::storage::Storage, ipc_rx: Option<std::sync::mpsc::Receiver<()>>) {
@@ -71,7 +80,7 @@ fn run_gui(storage: tabless::storage::Storage, ipc_rx: Option<std::sync::mpsc::R
 }
 
 fn main() {
-    env_logger::init();
+    let _ = env_logger::try_init();
 
     let args: Vec<String> = std::env::args().collect();
 
@@ -108,11 +117,18 @@ fn main() {
         match handler.run(url) {
             Ok(tabless::protocol::RunOutcome::FirstInstance(server)) => {
                 let (tx, rx) = std::sync::mpsc::channel();
-                spawn_ipc_server(db_path.clone(), config, server, tx);
+                let socket_path = config.socket_path();
+                let (handle, shutdown) = spawn_ipc_server(db_path.clone(), config, server, tx);
 
                 let storage =
                     tabless::storage::Storage::open(&db_path).expect("failed to open storage");
                 run_gui(storage, Some(rx));
+
+                shutdown.store(true, Ordering::Relaxed);
+                if let Ok(mut client) = IpcClient::connect(&socket_path) {
+                    let _ = client.send_url("tabless://shutdown");
+                }
+                let _ = handle.join();
             }
             Ok(tabless::protocol::RunOutcome::UrlForwarded) => {
                 // Silent exit
@@ -137,11 +153,17 @@ fn main() {
             }
             Ok(tabless::protocol::SingleInstance::First(server)) => {
                 let (tx, rx) = std::sync::mpsc::channel();
-                spawn_ipc_server(db_path.clone(), config, server, tx);
+                let (handle, shutdown) = spawn_ipc_server(db_path.clone(), config, server, tx);
 
                 let storage =
                     tabless::storage::Storage::open(&db_path).expect("failed to open storage");
                 run_gui(storage, Some(rx));
+
+                shutdown.store(true, Ordering::Relaxed);
+                if let Ok(mut client) = IpcClient::connect(&socket_path) {
+                    let _ = client.send_url("tabless://shutdown");
+                }
+                let _ = handle.join();
             }
             Err(e) => {
                 log::error!("Single instance check failed: {}", e);
