@@ -5,7 +5,12 @@ use crate::ui::ViewAction;
 pub struct InboxState {
     pub selected_index: usize,
     pub search_query: String,
-    pub search_focused: bool,
+}
+
+impl Default for InboxState {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl InboxState {
@@ -13,12 +18,15 @@ impl InboxState {
         InboxState {
             selected_index: 0,
             search_query: String::new(),
-            search_focused: false,
         }
     }
 
-    pub fn navigate_up(&mut self) {
-        self.selected_index = self.selected_index.saturating_sub(1);
+    pub fn navigate_up(&mut self, item_count: usize) {
+        if item_count == 0 {
+            self.selected_index = 0;
+        } else {
+            self.selected_index = (self.selected_index + item_count - 1) % item_count;
+        }
     }
 
     pub fn navigate_down(&mut self, item_count: usize) {
@@ -115,7 +123,7 @@ mod tests {
     fn navigate_up_decrements_index() {
         let mut state = InboxState::new();
         state.selected_index = 2;
-        state.navigate_up();
+        state.navigate_up(5);
         assert_eq!(state.selected_index, 1);
     }
 
@@ -128,9 +136,16 @@ mod tests {
     }
 
     #[test]
-    fn navigate_up_clamps_at_zero() {
+    fn navigate_up_wraps_to_end() {
         let mut state = InboxState::new();
-        state.navigate_up();
+        state.navigate_up(5);
+        assert_eq!(state.selected_index, 4);
+    }
+
+    #[test]
+    fn navigate_down_with_zero_items() {
+        let mut state = InboxState::new();
+        state.navigate_down(0);
         assert_eq!(state.selected_index, 0);
     }
 
@@ -218,5 +233,84 @@ mod tests {
         let state = InboxState::new();
         let filtered = state.filtered_items(&items);
         assert_eq!(filtered.len(), 1);
+    }
+
+    #[test]
+    fn search_case_insensitive() {
+        let items = vec![
+            UrlRecord {
+                id: 1,
+                canonical_url: "https://example.com".to_string(),
+                original_url: "https://example.com".to_string(),
+                title: Some("Example Site".to_string()),
+                favicon_path: None,
+                created_at: 0,
+                updated_at: 0,
+                archived: false,
+                pinned: false,
+            },
+            UrlRecord {
+                id: 2,
+                canonical_url: "https://rust-lang.org".to_string(),
+                original_url: "https://rust-lang.org".to_string(),
+                title: Some("Rust Programming".to_string()),
+                favicon_path: None,
+                created_at: 0,
+                updated_at: 0,
+                archived: false,
+                pinned: false,
+            },
+        ];
+        let mut state = InboxState::new();
+        state.search_query = "RUST".to_string();
+        let filtered = state.filtered_items(&items);
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].id, 2);
+    }
+
+    #[test]
+    fn search_matches_both_title_and_url() {
+        let items = vec![
+            UrlRecord {
+                id: 1,
+                canonical_url: "https://rust-lang.org".to_string(),
+                original_url: "https://rust-lang.org".to_string(),
+                title: Some("Rust Lang".to_string()),
+                favicon_path: None,
+                created_at: 0,
+                updated_at: 0,
+                archived: false,
+                pinned: false,
+            },
+            UrlRecord {
+                id: 2,
+                canonical_url: "https://example.com".to_string(),
+                original_url: "https://example.com".to_string(),
+                title: Some("Example Site".to_string()),
+                favicon_path: None,
+                created_at: 0,
+                updated_at: 0,
+                archived: false,
+                pinned: false,
+            },
+            UrlRecord {
+                id: 3,
+                canonical_url: "https://rusty-nail.com".to_string(),
+                original_url: "https://rusty-nail.com".to_string(),
+                title: Some("Another Site".to_string()),
+                favicon_path: None,
+                created_at: 0,
+                updated_at: 0,
+                archived: false,
+                pinned: false,
+            },
+        ];
+        let mut state = InboxState::new();
+        state.search_query = "rust".to_string();
+        let filtered = state.filtered_items(&items);
+        assert_eq!(filtered.len(), 2);
+        let ids: Vec<i64> = filtered.iter().map(|r| r.id).collect();
+        assert!(ids.contains(&1));
+        assert!(ids.contains(&3));
     }
 }
