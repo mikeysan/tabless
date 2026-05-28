@@ -10,5 +10,6 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 sublime_fuzzy = "0.7"
 which = "7.0"
 interprocess = "2"
+eframe = "0.31"
 
 [dev-dependencies]
