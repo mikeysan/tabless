@@ -3,7 +3,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use tabless::launcher::{DefaultPlatform, Launcher, PlatformBrowser, UrlLauncher};
 use tabless::protocol::ipc::IpcClient;
 
-const SHUTDOWN_SENTINEL: &str = "tabless://shutdown";
+/// Internal wire-protocol sentinel used to unblock the IPC server's
+/// blocking `accept()` during graceful shutdown. This is not a
+/// user-facing URL and cannot be invoked via the protocol handler.
+const SHUTDOWN_SENTINEL: &str = "__TABLESS_SHUTDOWN__";
 
 /// Ensures the IPC socket file is removed on scope exit,
 /// even if the IPC thread panics or fails to shut down cleanly.
@@ -60,6 +63,7 @@ fn spawn_ipc_server(
             match server.accept_url() {
                 Ok(url) => {
                     if url == SHUTDOWN_SENTINEL {
+                        log::debug!("Received shutdown sentinel, exiting IPC loop");
                         break;
                     }
                     if let Err(e) = handler.handle_url(&url) {
