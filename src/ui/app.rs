@@ -9,15 +9,23 @@ pub struct TablessApp {
     inbox_state: InboxState,
     urls: Vec<UrlRecord>,
     error_message: Option<String>,
+    launcher: Option<Box<dyn crate::launcher::UrlLauncher>>,
+    ipc_rx: Option<std::sync::mpsc::Receiver<()>>,
 }
 
 impl TablessApp {
-    pub fn new(storage: Storage) -> Self {
+    pub fn new(
+        storage: Storage,
+        launcher: Option<Box<dyn crate::launcher::UrlLauncher>>,
+        ipc_rx: Option<std::sync::mpsc::Receiver<()>>,
+    ) -> Self {
         let mut app = TablessApp {
             storage,
             inbox_state: InboxState::new(),
             urls: Vec::new(),
             error_message: None,
+            launcher,
+            ipc_rx,
         };
         app.refresh_urls();
         app
@@ -27,7 +35,6 @@ impl TablessApp {
         match self.storage.urls().list_inbox() {
             Ok(urls) => {
                 self.urls = urls;
-                self.error_message = None;
             }
             Err(e) => {
                 eprintln!("Failed to load inbox: {}", e);
@@ -38,15 +45,31 @@ impl TablessApp {
 
     pub fn apply_actions(&mut self, actions: Vec<ViewAction>) {
         self.error_message = None;
+        let mut mutated = false;
         for action in actions {
             let result = match action {
-                ViewAction::Archive(id) => self.storage.urls().set_archived(id, true),
-                ViewAction::Pin(id) => self.storage.urls().set_pinned(id, true),
-                ViewAction::Delete(id) => self.storage.urls().delete(id),
+                ViewAction::Archive(id) => {
+                    mutated = true;
+                    self.storage.urls().set_archived(id, true)
+                }
+                ViewAction::Pin(id) => {
+                    mutated = true;
+                    self.storage.urls().set_pinned(id, true)
+                }
+                ViewAction::Delete(id) => {
+                    mutated = true;
+                    self.storage.urls().delete(id)
+                }
                 ViewAction::Launch(id) => {
                     match self.storage.urls().find_by_id(id) {
                         Ok(Some(record)) => {
-                            println!("Launching: {}", record.canonical_url);
+                            if let Some(ref launcher) = self.launcher {
+                                if let Err(e) = launcher.launch(&record.canonical_url) {
+                                    self.error_message = Some(format!("Launch failed: {}", e));
+                                }
+                            } else {
+                                self.error_message = Some("No browser configured".to_string());
+                            }
                             Ok(())
                         }
                         Ok(None) => {
@@ -62,12 +85,25 @@ impl TablessApp {
                 self.error_message = Some(format!("Action failed: {}", e));
             }
         }
-        self.refresh_urls();
+        if mutated {
+            self.refresh_urls();
+        }
     }
 }
 
 impl App for TablessApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Drain IPC notifications and refresh when new URLs arrive
+        let mut ipc_notified = false;
+        if let Some(ref rx) = self.ipc_rx {
+            while rx.try_recv().is_ok() {
+                ipc_notified = true;
+            }
+        }
+        if ipc_notified {
+            self.refresh_urls();
+        }
+
         let actions = {
             let filtered = self.inbox_state.filtered_items(&self.urls);
 
@@ -153,7 +189,7 @@ mod tests {
         let url = ValidatedUrl::parse("https://example.com").unwrap();
         let id = storage.urls().insert(&url, Some("Example Site")).unwrap();
 
-        let mut app = TablessApp::new(storage);
+        let mut app = TablessApp::new(storage, None, None);
         app.apply_actions(vec![ViewAction::Archive(id)]);
 
         let record = app.storage.urls().find_by_id(id).unwrap().unwrap();
@@ -167,7 +203,7 @@ mod tests {
         let url = ValidatedUrl::parse("https://example.com").unwrap();
         let id = storage.urls().insert(&url, Some("Example Site")).unwrap();
 
-        let mut app = TablessApp::new(storage);
+        let mut app = TablessApp::new(storage, None, None);
         app.apply_actions(vec![ViewAction::Pin(id)]);
 
         let record = app.storage.urls().find_by_id(id).unwrap().unwrap();
@@ -181,10 +217,75 @@ mod tests {
         let url = ValidatedUrl::parse("https://example.com").unwrap();
         let id = storage.urls().insert(&url, Some("Example Site")).unwrap();
 
-        let mut app = TablessApp::new(storage);
+        let mut app = TablessApp::new(storage, None, None);
         app.apply_actions(vec![ViewAction::Delete(id)]);
 
         let record = app.storage.urls().find_by_id(id).unwrap();
         assert!(record.is_none());
+    }
+
+    #[test]
+    fn launch_action_records_launch_attempt() {
+        use std::sync::{Arc, Mutex};
+
+        struct MockLauncher {
+            launched: Arc<Mutex<Vec<String>>>,
+        }
+
+        impl crate::launcher::UrlLauncher for MockLauncher {
+            fn launch(&self, url: &str) -> Result<(), crate::launcher::LaunchError> {
+                self.launched.lock().unwrap().push(url.to_string());
+                Ok(())
+            }
+        }
+
+        let db_path = temp_db_path();
+        let storage = Storage::open(&db_path).unwrap();
+        let url = ValidatedUrl::parse("https://example.com").unwrap();
+        let id = storage.urls().insert(&url, Some("Example")).unwrap();
+
+        let launched = Arc::new(Mutex::new(Vec::new()));
+        let launcher = MockLauncher {
+            launched: launched.clone(),
+        };
+
+        let mut app = TablessApp::new(storage, Some(Box::new(launcher)), None);
+        app.apply_actions(vec![ViewAction::Launch(id)]);
+
+        let urls = launched.lock().unwrap();
+        assert_eq!(urls.len(), 1);
+        assert_eq!(urls[0], "https://example.com/");
+    }
+
+    #[test]
+    fn ipc_notification_refreshes_urls() {
+        let db_path = temp_db_path();
+        let storage = Storage::open(&db_path).unwrap();
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        let mut app = TablessApp::new(storage, None, Some(rx));
+        assert!(app.urls.is_empty());
+
+        // Simulate another process inserting a URL
+        let storage2 = Storage::open(&db_path).unwrap();
+        let url = ValidatedUrl::parse("https://example.com").unwrap();
+        let _ = storage2.urls().insert(&url, None).unwrap();
+
+        // Simulate IPC notification
+        tx.send(()).unwrap();
+
+        // Trigger update (normally called by eframe; we call the logic directly)
+        let mut ipc_notified = false;
+        if let Some(ref rx) = app.ipc_rx {
+            while rx.try_recv().is_ok() {
+                ipc_notified = true;
+            }
+        }
+        if ipc_notified {
+            app.refresh_urls();
+        }
+
+        assert_eq!(app.urls.len(), 1);
+        assert_eq!(app.urls[0].canonical_url, "https://example.com/");
     }
 }
