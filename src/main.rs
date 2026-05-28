@@ -12,6 +12,7 @@ const SHUTDOWN_SENTINEL: &str = "__TABLESS_SHUTDOWN__";
 /// even if the IPC thread panics or fails to shut down cleanly.
 struct SocketGuard<'a>(&'a std::path::Path);
 
+#[cfg(unix)]
 impl Drop for SocketGuard<'_> {
     fn drop(&mut self) {
         let _ = std::fs::remove_file(self.0);

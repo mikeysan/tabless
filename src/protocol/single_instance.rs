@@ -25,12 +25,28 @@ impl SingleInstance {
 #[cfg(test)]
 mod tests {
     use super::SingleInstance;
+    use std::path::PathBuf;
+
+    fn test_socket_path(name: &str) -> PathBuf {
+        #[cfg(unix)]
+        {
+            let tmp =
+                std::env::temp_dir().join(format!("tabless-si-{name}-{}-test", std::process::id()));
+            let _ = std::fs::create_dir_all(&tmp);
+            tmp.join("test.sock")
+        }
+        #[cfg(windows)]
+        {
+            PathBuf::from(format!(
+                r"\\.\pipe\tabless-si-{name}-{}",
+                std::process::id()
+            ))
+        }
+    }
 
     #[test]
     fn first_instance_succeeds_when_no_server() {
-        let tmp = std::env::temp_dir().join(format!("tabless-si-test-{}", std::process::id()));
-        let _ = std::fs::create_dir_all(&tmp);
-        let socket = tmp.join("test.sock");
+        let socket = test_socket_path("first");
         let _ = std::fs::remove_file(&socket);
 
         let result = SingleInstance::new(&socket);
@@ -40,9 +56,7 @@ mod tests {
 
     #[test]
     fn second_instance_detects_existing_server() {
-        let tmp = std::env::temp_dir().join(format!("tabless-si-test2-{}", std::process::id()));
-        let _ = std::fs::create_dir_all(&tmp);
-        let socket = tmp.join("test2.sock");
+        let socket = test_socket_path("second");
         let _ = std::fs::remove_file(&socket);
 
         // First instance binds the server

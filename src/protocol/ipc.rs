@@ -117,14 +117,27 @@ impl IpcClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
     use std::thread;
 
+    fn test_socket_path(name: &str) -> PathBuf {
+        #[cfg(unix)]
+        {
+            let tmp =
+                std::env::temp_dir().join(format!("tabless-{name}-{}-test", std::process::id()));
+            let _ = std::fs::create_dir_all(&tmp);
+            tmp.join("test.sock")
+        }
+        #[cfg(windows)]
+        {
+            PathBuf::from(format!(r"\\.\pipe\tabless-{name}-{}", std::process::id()))
+        }
+    }
+
     #[test]
+    #[cfg(unix)]
     fn drop_removes_socket_file() {
-        let tmp_dir =
-            std::env::temp_dir().join(format!("tabless-drop-test-{}", std::process::id()));
-        let _ = std::fs::create_dir_all(&tmp_dir);
-        let socket_path = tmp_dir.join("drop.sock");
+        let socket_path = test_socket_path("drop");
 
         {
             let server = IpcServer::bind(&socket_path).unwrap();
@@ -137,9 +150,7 @@ mod tests {
 
     #[test]
     fn roundtrip_url() {
-        let tmp_dir = std::env::temp_dir().join(format!("tabless-test-{}", std::process::id()));
-        let _ = std::fs::create_dir_all(&tmp_dir);
-        let socket_path = tmp_dir.join("ipc.sock");
+        let socket_path = test_socket_path("roundtrip");
 
         let server = IpcServer::bind(&socket_path).unwrap();
         let expected_url = "https://example.com/test";
@@ -163,7 +174,7 @@ mod tests {
         let db_path = tmp_dir.join("test.db");
         let _ = std::fs::remove_file(&db_path);
 
-        let socket_path = tmp_dir.join("ipc.sock");
+        let socket_path = test_socket_path("delivery");
 
         let server = IpcServer::bind(&socket_path).unwrap();
         let db_for_thread = db_path.clone();

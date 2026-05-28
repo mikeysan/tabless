@@ -24,7 +24,19 @@ pub struct ProtocolConfig {
 
 impl ProtocolConfig {
     pub fn socket_path(&self) -> PathBuf {
-        self.data_dir.join("tabless.ipc")
+        #[cfg(unix)]
+        {
+            self.data_dir.join("tabless.ipc")
+        }
+        #[cfg(windows)]
+        {
+            use std::collections::hash_map::DefaultHasher;
+            use std::hash::{Hash, Hasher};
+            let mut hasher = DefaultHasher::new();
+            self.data_dir.to_string_lossy().hash(&mut hasher);
+            let hash = hasher.finish();
+            PathBuf::from(format!(r"\\.\pipe\tabless-{hash:x}"))
+        }
     }
 }
 
