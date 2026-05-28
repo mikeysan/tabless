@@ -54,7 +54,10 @@ mod tests {
 
         // Second instance should connect as client
         let second = SingleInstance::new(&socket).unwrap();
-        assert!(matches!(second, SingleInstance::Subsequent(_)), "expected second instance to be Subsequent");
+        assert!(
+            matches!(second, SingleInstance::Subsequent(_)),
+            "expected second instance to be Subsequent"
+        );
 
         // Keep server alive until end of test to avoid spurious errors
         drop(server);

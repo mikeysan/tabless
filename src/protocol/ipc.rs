@@ -121,8 +121,7 @@ mod tests {
         use crate::storage::Storage;
         use crate::url::ValidatedUrl;
 
-        let tmp_dir = std::env::temp_dir()
-            .join(format!("tabless-ipc-db-{}", std::process::id()));
+        let tmp_dir = std::env::temp_dir().join(format!("tabless-ipc-db-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&tmp_dir);
         let db_path = tmp_dir.join("test.db");
         let _ = std::fs::remove_file(&db_path);
