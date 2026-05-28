@@ -37,7 +37,7 @@ impl TablessApp {
                 self.urls = urls;
             }
             Err(e) => {
-                eprintln!("Failed to load inbox: {}", e);
+                log::error!("Failed to load inbox: {}", e);
                 if self.error_message.is_none() {
                     self.error_message = Some(format!("Failed to load inbox: {}", e));
                 }
@@ -74,14 +74,14 @@ impl TablessApp {
                         Ok(())
                     }
                     Ok(None) => {
-                        eprintln!("URL not found for launch: id={}", id);
+                        log::warn!("URL not found for launch: id={}", id);
                         Ok(())
                     }
                     Err(e) => Err(e),
                 },
             };
             if let Err(e) = result {
-                eprintln!("Action failed: {}", e);
+                log::error!("Action failed: {}", e);
                 self.error_message = Some(format!("Action failed: {}", e));
             }
         }

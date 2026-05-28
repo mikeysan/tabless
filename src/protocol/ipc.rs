@@ -11,6 +11,15 @@ use super::error::ProtocolError;
 
 pub struct IpcServer {
     listener: LocalSocketListener,
+    #[cfg(unix)]
+    socket_path: std::path::PathBuf,
+}
+
+#[cfg(unix)]
+impl Drop for IpcServer {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.socket_path);
+    }
 }
 
 impl IpcServer {
@@ -31,7 +40,11 @@ impl IpcServer {
                 reason: e.to_string(),
             })?;
 
-        Ok(Self { listener })
+        Ok(Self {
+            listener,
+            #[cfg(unix)]
+            socket_path: socket_path.to_path_buf(),
+        })
     }
 
     pub fn accept_url(&self) -> Result<String, ProtocolError> {

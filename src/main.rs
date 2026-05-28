@@ -28,14 +28,14 @@ fn spawn_ipc_server(
         let storage = match tabless::storage::Storage::open(&db_path) {
             Ok(s) => s,
             Err(e) => {
-                eprintln!("IPC thread failed to open storage: {}", e);
+                log::error!("IPC thread failed to open storage: {}", e);
                 return;
             }
         };
         let handler = match tabless::protocol::ProtocolHandler::new(config, storage) {
             Ok(h) => h,
             Err(e) => {
-                eprintln!("IPC thread failed to create handler: {}", e);
+                log::error!("IPC thread failed to create handler: {}", e);
                 return;
             }
         };
@@ -43,12 +43,12 @@ fn spawn_ipc_server(
             match server.accept_url() {
                 Ok(url) => {
                     if let Err(e) = handler.handle_url(&url) {
-                        eprintln!("IPC handle error: {}", e);
+                        log::error!("IPC handle error: {}", e);
                     }
                     let _ = tx.send(());
                 }
                 Err(e) => {
-                    eprintln!("IPC accept error: {}", e);
+                    log::warn!("IPC accept error: {}", e);
                 }
             }
         }
@@ -71,13 +71,15 @@ fn run_gui(storage: tabless::storage::Storage, ipc_rx: Option<std::sync::mpsc::R
 }
 
 fn main() {
+    env_logger::init();
+
     let args: Vec<String> = std::env::args().collect();
 
     if args.len() > 1 && args[1] == "register-protocol" {
         let binary_path = std::env::current_exe().expect("failed to get current executable path");
         match tabless::protocol::registration::register_protocol(&binary_path) {
-            Ok(()) => println!("Protocol registered successfully."),
-            Err(e) => eprintln!("Registration failed: {}", e),
+            Ok(()) => log::info!("Protocol registered successfully."),
+            Err(e) => log::error!("Registration failed: {}", e),
         }
         return;
     }
@@ -116,7 +118,7 @@ fn main() {
                 // Silent exit
             }
             Err(e) => {
-                eprintln!("Protocol handling failed: {}", e);
+                log::error!("Protocol handling failed: {}", e);
                 std::process::exit(1);
             }
         }
@@ -142,7 +144,7 @@ fn main() {
                 run_gui(storage, Some(rx));
             }
             Err(e) => {
-                eprintln!("Single instance check failed: {}", e);
+                log::error!("Single instance check failed: {}", e);
                 std::process::exit(1);
             }
         }

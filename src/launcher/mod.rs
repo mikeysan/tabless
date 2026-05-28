@@ -37,7 +37,10 @@ pub trait UrlLauncher: Send + Sync {
 
 impl<P: PlatformBrowser> UrlLauncher for Launcher<P> {
     fn launch(&self, url: &str) -> Result<(), LaunchError> {
-        let _child = self.launch(url)?;
+        let mut child = self.launch(url)?;
+        std::thread::spawn(move || {
+            let _ = child.wait();
+        });
         Ok(())
     }
 }
