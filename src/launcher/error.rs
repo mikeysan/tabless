@@ -21,7 +21,11 @@ impl fmt::Display for DiscoveryError {
                 write!(f, "browser path not found: {}", path.display())
             }
             DiscoveryError::PermissionDenied { path } => {
-                write!(f, "permission denied reading browser path: {}", path.display())
+                write!(
+                    f,
+                    "permission denied reading browser path: {}",
+                    path.display()
+                )
             }
             DiscoveryError::ReadFailed { source } => {
                 write!(f, "failed to read browser discovery data: {}", source)
@@ -70,10 +74,7 @@ mod tests {
         let err = DiscoveryError::PathNotFound {
             path: PathBuf::from("/usr/bin/firefox"),
         };
-        assert_eq!(
-            err.to_string(),
-            "browser path not found: /usr/bin/firefox"
-        );
+        assert_eq!(err.to_string(), "browser path not found: /usr/bin/firefox");
     }
 
     #[test]

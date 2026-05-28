@@ -133,11 +133,9 @@ fn register_macos(binary_path: &Path) -> Result<(), ProtocolError> {
     );
 
     let wrapper_path = macos.join("tabless-wrapper");
-    fs::write(&wrapper_path, wrapper_script).map_err(|e| {
-        ProtocolError::RegistrationFailed {
-            platform: "macos".to_string(),
-            reason: format!("write wrapper failed: {}", e),
-        }
+    fs::write(&wrapper_path, wrapper_script).map_err(|e| ProtocolError::RegistrationFailed {
+        platform: "macos".to_string(),
+        reason: format!("write wrapper failed: {}", e),
     })?;
 
     #[cfg(unix)]
@@ -196,13 +194,12 @@ fn register_windows(binary_path: &Path) -> Result<(), ProtocolError> {
     ];
 
     for args in &cmds {
-        let status = Command::new("reg")
-            .args(args)
-            .status()
-            .map_err(|e| ProtocolError::RegistrationFailed {
+        let status = Command::new("reg").args(args).status().map_err(|e| {
+            ProtocolError::RegistrationFailed {
                 platform: "windows".to_string(),
                 reason: format!("reg command failed: {}", e),
-            })?;
+            }
+        })?;
 
         if !status.success() {
             return Err(ProtocolError::RegistrationFailed {

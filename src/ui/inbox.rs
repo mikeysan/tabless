@@ -1,6 +1,6 @@
 use crate::storage::UrlRecord;
-use crate::ui::url_row::url_row;
 use crate::ui::ViewAction;
+use crate::ui::url_row::url_row;
 
 pub struct InboxState {
     pub selected_index: usize,
@@ -227,19 +227,17 @@ mod tests {
 
     #[test]
     fn empty_search_returns_all() {
-        let items = vec![
-            UrlRecord {
-                id: 1,
-                canonical_url: "https://example.com".to_string(),
-                original_url: "https://example.com".to_string(),
-                title: None,
-                favicon_path: None,
-                created_at: 0,
-                updated_at: 0,
-                archived: false,
-                pinned: false,
-            },
-        ];
+        let items = vec![UrlRecord {
+            id: 1,
+            canonical_url: "https://example.com".to_string(),
+            original_url: "https://example.com".to_string(),
+            title: None,
+            favicon_path: None,
+            created_at: 0,
+            updated_at: 0,
+            archived: false,
+            pinned: false,
+        }];
         let state = InboxState::new();
         let filtered = state.filtered_items(&items);
         assert_eq!(filtered.len(), 1);

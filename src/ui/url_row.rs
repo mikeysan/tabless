@@ -57,10 +57,7 @@ pub fn url_row(
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.vertical(|ui| {
-                        let title = record
-                            .title
-                            .as_deref()
-                            .unwrap_or(&record.canonical_url);
+                        let title = record.title.as_deref().unwrap_or(&record.canonical_url);
                         ui.add(egui::Label::new(egui::RichText::new(title).strong()).truncate());
                         ui.add(
                             egui::Label::new(

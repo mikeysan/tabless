@@ -35,7 +35,9 @@ fn end_to_end_single_instance_and_storage() {
 
     // Second instance: connect, send URL
     let mut client = IpcClient::connect(&socket_path).unwrap();
-    client.send_url("tabless://open?url=https://example.org").unwrap();
+    client
+        .send_url("tabless://open?url=https://example.org")
+        .unwrap();
 
     handle.join().unwrap();
 

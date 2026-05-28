@@ -2,11 +2,11 @@ use std::collections::HashMap;
 use std::io;
 use std::process::Child;
 
+use super::error::DiscoveryError;
 use super::error::LaunchError;
 use super::identity::BrowserIdentity;
 use super::info::BrowserInfo;
 use super::platform::PlatformBrowser;
-use super::error::DiscoveryError;
 
 /// A test double for PlatformBrowser. Never spawns real processes.
 pub struct MockPlatform {

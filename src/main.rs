@@ -4,7 +4,10 @@ fn build_launcher() -> Option<Box<dyn UrlLauncher>> {
     let platform = DefaultPlatform::new();
     let discovered = platform.discover_browsers().ok()?;
     let mut launcher = Launcher::new(platform, discovered);
-    let defaults: Vec<_> = launcher.registry().all_browsers()
+    // Collect defaults first to avoid borrowing launcher mutably while iterating registry.
+    let defaults: Vec<_> = launcher
+        .registry()
+        .all_browsers()
         .into_iter()
         .filter(|info| info.is_default)
         .map(|info| info.identity.clone())
@@ -15,7 +18,12 @@ fn build_launcher() -> Option<Box<dyn UrlLauncher>> {
     Some(Box::new(launcher))
 }
 
-fn spawn_ipc_server(db_path: std::path::PathBuf, config: tabless::protocol::ProtocolConfig, server: tabless::protocol::ipc::IpcServer, tx: std::sync::mpsc::Sender<()>) {
+fn spawn_ipc_server(
+    db_path: std::path::PathBuf,
+    config: tabless::protocol::ProtocolConfig,
+    server: tabless::protocol::ipc::IpcServer,
+    tx: std::sync::mpsc::Sender<()>,
+) {
     std::thread::spawn(move || {
         let storage = match tabless::storage::Storage::open(&db_path) {
             Ok(s) => s,
@@ -51,8 +59,7 @@ fn run_gui(storage: tabless::storage::Storage, ipc_rx: Option<std::sync::mpsc::R
     let launcher = build_launcher();
     let app = tabless::ui::app::TablessApp::new(storage, launcher, ipc_rx);
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_inner_size([800.0, 600.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([800.0, 600.0]),
         ..Default::default()
     };
     eframe::run_native(
@@ -88,7 +95,8 @@ fn main() {
 
         let config = tabless::protocol::ProtocolConfig {
             scheme: "tabless",
-            binary_path: std::env::current_exe().unwrap_or_else(|_| std::path::PathBuf::from("tabless")),
+            binary_path: std::env::current_exe()
+                .unwrap_or_else(|_| std::path::PathBuf::from("tabless")),
             data_dir,
         };
 
@@ -100,7 +108,8 @@ fn main() {
                 let (tx, rx) = std::sync::mpsc::channel();
                 spawn_ipc_server(db_path.clone(), config, server, tx);
 
-                let storage = tabless::storage::Storage::open(&db_path).expect("failed to open storage");
+                let storage =
+                    tabless::storage::Storage::open(&db_path).expect("failed to open storage");
                 run_gui(storage, Some(rx));
             }
             Ok(tabless::protocol::RunOutcome::UrlForwarded) => {
@@ -112,7 +121,26 @@ fn main() {
             }
         }
     } else {
+        let config = tabless::protocol::ProtocolConfig {
+            scheme: "tabless",
+            binary_path: std::env::current_exe()
+                .unwrap_or_else(|_| std::path::PathBuf::from("tabless")),
+            data_dir: data_dir.clone(),
+        };
+        let socket_path = config.socket_path();
+
+        let server = match tabless::protocol::ipc::IpcServer::bind(&socket_path) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("Failed to bind IPC server: {}", e);
+                std::process::exit(1);
+            }
+        };
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        spawn_ipc_server(db_path.clone(), config, server, tx);
+
         let storage = tabless::storage::Storage::open(&db_path).expect("failed to open storage");
-        run_gui(storage, None);
+        run_gui(storage, Some(rx));
     }
 }

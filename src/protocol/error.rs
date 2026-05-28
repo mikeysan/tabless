@@ -31,7 +31,11 @@ impl fmt::Display for ProtocolError {
                 write!(f, "IPC connect failed: {}", reason)
             }
             ProtocolError::RegistrationFailed { platform, reason } => {
-                write!(f, "protocol registration failed on {}: {}", platform, reason)
+                write!(
+                    f,
+                    "protocol registration failed on {}: {}",
+                    platform, reason
+                )
             }
             ProtocolError::AlreadyRegistered => {
                 write!(f, "protocol already registered")

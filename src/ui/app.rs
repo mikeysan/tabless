@@ -1,8 +1,8 @@
 use eframe::App;
 
 use crate::storage::{Storage, UrlRecord};
-use crate::ui::inbox::{inbox_view, InboxState};
 use crate::ui::ViewAction;
+use crate::ui::inbox::{InboxState, inbox_view};
 
 pub struct TablessApp {
     storage: Storage,
@@ -62,25 +62,23 @@ impl TablessApp {
                     mutated = true;
                     self.storage.urls().delete(id)
                 }
-                ViewAction::Launch(id) => {
-                    match self.storage.urls().find_by_id(id) {
-                        Ok(Some(record)) => {
-                            if let Some(ref launcher) = self.launcher {
-                                if let Err(e) = launcher.launch(&record.canonical_url) {
-                                    self.error_message = Some(format!("Launch failed: {}", e));
-                                }
-                            } else {
-                                self.error_message = Some("No browser configured".to_string());
+                ViewAction::Launch(id) => match self.storage.urls().find_by_id(id) {
+                    Ok(Some(record)) => {
+                        if let Some(ref launcher) = self.launcher {
+                            if let Err(e) = launcher.launch(&record.canonical_url) {
+                                self.error_message = Some(format!("Launch failed: {}", e));
                             }
-                            Ok(())
+                        } else {
+                            self.error_message = Some("No browser configured".to_string());
                         }
-                        Ok(None) => {
-                            eprintln!("URL not found for launch: id={}", id);
-                            Ok(())
-                        }
-                        Err(e) => Err(e),
+                        Ok(())
                     }
-                }
+                    Ok(None) => {
+                        eprintln!("URL not found for launch: id={}", id);
+                        Ok(())
+                    }
+                    Err(e) => Err(e),
+                },
             };
             if let Err(e) = result {
                 eprintln!("Action failed: {}", e);
@@ -298,7 +296,12 @@ mod tests {
         let mut app = TablessApp::new(storage, Some(Box::new(FailingLauncher)), None);
         app.apply_actions(vec![ViewAction::Launch(id)]);
 
-        assert!(app.error_message.as_ref().unwrap().contains("Launch failed"));
+        assert!(
+            app.error_message
+                .as_ref()
+                .unwrap()
+                .contains("Launch failed")
+        );
     }
 
     #[test]

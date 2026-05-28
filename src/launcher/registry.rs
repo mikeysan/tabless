@@ -21,10 +21,7 @@ impl BrowserRegistry {
         }
     }
 
-    pub fn set_preferred(
-        &mut self,
-        identity: BrowserIdentity,
-    ) -> Result<(), DiscoveryError> {
+    pub fn set_preferred(&mut self, identity: BrowserIdentity) -> Result<(), DiscoveryError> {
         if !self.known.contains_key(&identity) {
             return Err(DiscoveryError::PathNotFound {
                 path: std::path::PathBuf::from(format!("{:?}", identity)),

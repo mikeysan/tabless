@@ -27,12 +27,12 @@ impl<P: PlatformBrowser> Launcher<P> {
 
     /// Launch a URL in the user's preferred browser.
     pub fn launch(&self, url: &str) -> Result<Child, LaunchError> {
-        let browser = self
-            .registry
-            .preferred_browser()
-            .ok_or_else(|| LaunchError::BrowserNotFound {
-                identity: BrowserIdentity::Custom("preferred".to_string()),
-            })?;
+        let browser =
+            self.registry
+                .preferred_browser()
+                .ok_or_else(|| LaunchError::BrowserNotFound {
+                    identity: BrowserIdentity::Custom("preferred".to_string()),
+                })?;
         self.launch_in_browser(browser, url)
     }
 
@@ -51,8 +51,7 @@ impl<P: PlatformBrowser> Launcher<P> {
         self.launch_in_browser(browser, url)
     }
 
-    fn launch_in_browser(&self, browser: &BrowserInfo, url: &str
-    ) -> Result<Child, LaunchError> {
+    fn launch_in_browser(&self, browser: &BrowserInfo, url: &str) -> Result<Child, LaunchError> {
         match self.platform.is_browser_running(browser) {
             Ok(true) => self.platform.launch_new_tab(browser, url),
             Ok(false) => self.platform.launch_url(browser, url),
@@ -98,10 +97,8 @@ mod tests {
     #[test]
     fn launch_with_identity_uses_launch_url_when_not_running() {
         let launcher = make_launcher();
-        let result = launcher.launch_with_identity(
-            &BrowserIdentity::Firefox,
-            "https://example.com",
-        );
+        let result =
+            launcher.launch_with_identity(&BrowserIdentity::Firefox, "https://example.com");
         assert!(
             matches!(result, Err(LaunchError::SpawnFailed { ref source }) if source.contains("launch_url")),
             "expected launch_url to be called when browser is not running, got: {:?}",
@@ -115,10 +112,8 @@ mod tests {
         let mut platform = MockPlatform::new(browsers.clone());
         platform.set_running(BrowserIdentity::Firefox, true);
         let launcher = Launcher::new(platform, browsers);
-        let result = launcher.launch_with_identity(
-            &BrowserIdentity::Firefox,
-            "https://example.com",
-        );
+        let result =
+            launcher.launch_with_identity(&BrowserIdentity::Firefox, "https://example.com");
         assert!(
             matches!(result, Err(LaunchError::SpawnFailed { ref source }) if source.contains("launch_new_tab")),
             "expected launch_new_tab to be called when browser is running, got: {:?}",
@@ -131,10 +126,8 @@ mod tests {
         let browsers = vec![make_info(BrowserIdentity::Firefox)];
         let platform = MockPlatform::new(browsers.clone());
         let launcher = Launcher::new(platform, browsers);
-        let result = launcher.launch_with_identity(
-            &BrowserIdentity::Firefox,
-            "https://example.com",
-        );
+        let result =
+            launcher.launch_with_identity(&BrowserIdentity::Firefox, "https://example.com");
         assert!(
             matches!(result, Err(LaunchError::SpawnFailed { source }) if source.contains("launch_url"))
         );
@@ -143,10 +136,7 @@ mod tests {
     #[test]
     fn launch_with_identity_fails_for_unknown_browser() {
         let launcher = make_launcher();
-        let result = launcher.launch_with_identity(
-            &BrowserIdentity::Zen,
-            "https://example.com",
-        );
+        let result = launcher.launch_with_identity(&BrowserIdentity::Zen, "https://example.com");
         assert!(
             matches!(result, Err(LaunchError::BrowserNotFound { identity }) if identity == BrowserIdentity::Zen)
         );

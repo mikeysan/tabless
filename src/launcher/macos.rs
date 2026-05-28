@@ -30,7 +30,10 @@ impl MacBrowser {
         let mut found = Vec::new();
 
         for (bundle_id, identity) in Self::known_bundle_ids() {
-            let app_path = format!("/Applications/{}.app", Self::app_name_for_identity(&identity));
+            let app_path = format!(
+                "/Applications/{}.app",
+                Self::app_name_for_identity(&identity)
+            );
             let app_path_buf = PathBuf::from(&app_path);
             if app_path_buf.exists() {
                 let executable = Self::find_executable_in_bundle(&app_path_buf);

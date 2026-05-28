@@ -42,7 +42,8 @@ mod tests {
 
     #[test]
     fn parse_url_with_encoded_value() {
-        let result = parse_protocol_url("tabless://open?url=https%3A%2F%2Fexample.com%2Fpath").unwrap();
+        let result =
+            parse_protocol_url("tabless://open?url=https%3A%2F%2Fexample.com%2Fpath").unwrap();
         assert_eq!(result, "https://example.com/path");
     }
 

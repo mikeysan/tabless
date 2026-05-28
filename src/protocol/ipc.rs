@@ -2,9 +2,9 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 
 use interprocess::local_socket::{
+    ConnectOptions, GenericFilePath, ListenerOptions, ToFsName,
     prelude::{LocalSocketListener, LocalSocketStream},
     traits::Listener,
-    ConnectOptions, GenericFilePath, ListenerOptions, ToFsName,
 };
 
 use super::error::ProtocolError;
@@ -18,14 +18,18 @@ impl IpcServer {
         #[cfg(unix)]
         let _ = std::fs::remove_file(socket_path);
 
-        let name = socket_path
-            .to_fs_name::<GenericFilePath>()
-            .map_err(|e| ProtocolError::IpcBindFailed { reason: e.to_string() })?;
+        let name = socket_path.to_fs_name::<GenericFilePath>().map_err(|e| {
+            ProtocolError::IpcBindFailed {
+                reason: e.to_string(),
+            }
+        })?;
 
         let listener = ListenerOptions::new()
             .name(name)
             .create_sync()
-            .map_err(|e| ProtocolError::IpcBindFailed { reason: e.to_string() })?;
+            .map_err(|e| ProtocolError::IpcBindFailed {
+                reason: e.to_string(),
+            })?;
 
         Ok(Self { listener })
     }
@@ -34,13 +38,17 @@ impl IpcServer {
         let stream = self
             .listener
             .accept()
-            .map_err(|e| ProtocolError::IpcBindFailed { reason: e.to_string() })?;
+            .map_err(|e| ProtocolError::IpcBindFailed {
+                reason: e.to_string(),
+            })?;
 
         let mut reader = BufReader::new(stream);
         let mut line = String::new();
         reader
             .read_line(&mut line)
-            .map_err(|e| ProtocolError::IpcBindFailed { reason: e.to_string() })?;
+            .map_err(|e| ProtocolError::IpcBindFailed {
+                reason: e.to_string(),
+            })?;
 
         line.strip_prefix("URL:")
             .map(|s| s.trim_end().to_string())
@@ -56,24 +64,31 @@ pub struct IpcClient {
 
 impl IpcClient {
     pub fn connect(socket_path: &Path) -> Result<Self, ProtocolError> {
-        let name = socket_path
-            .to_fs_name::<GenericFilePath>()
-            .map_err(|e| ProtocolError::IpcConnectFailed { reason: e.to_string() })?;
+        let name = socket_path.to_fs_name::<GenericFilePath>().map_err(|e| {
+            ProtocolError::IpcConnectFailed {
+                reason: e.to_string(),
+            }
+        })?;
 
         let stream = ConnectOptions::new()
             .name(name)
             .connect_sync()
-            .map_err(|e| ProtocolError::IpcConnectFailed { reason: e.to_string() })?;
+            .map_err(|e| ProtocolError::IpcConnectFailed {
+                reason: e.to_string(),
+            })?;
 
         Ok(Self { stream })
     }
 
     pub fn send_url(&mut self, url: &str) -> Result<(), ProtocolError> {
-        writeln!(self.stream, "URL:{}", url)
-            .map_err(|e| ProtocolError::IpcConnectFailed { reason: e.to_string() })?;
+        writeln!(self.stream, "URL:{}", url).map_err(|e| ProtocolError::IpcConnectFailed {
+            reason: e.to_string(),
+        })?;
         self.stream
             .flush()
-            .map_err(|e| ProtocolError::IpcConnectFailed { reason: e.to_string() })?;
+            .map_err(|e| ProtocolError::IpcConnectFailed {
+                reason: e.to_string(),
+            })?;
         Ok(())
     }
 }
@@ -85,8 +100,7 @@ mod tests {
 
     #[test]
     fn roundtrip_url() {
-        let tmp_dir =
-            std::env::temp_dir().join(format!("tabless-test-{}", std::process::id()));
+        let tmp_dir = std::env::temp_dir().join(format!("tabless-test-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&tmp_dir);
         let socket_path = tmp_dir.join("ipc.sock");
 
