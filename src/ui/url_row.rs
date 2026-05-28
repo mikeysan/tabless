@@ -33,6 +33,12 @@ pub fn url_row(
         ui.visuals().panel_fill
     };
 
+    let id = ui.id().with(record.id);
+    let was_hovered: bool = ui
+        .ctx()
+        .memory(|mem| mem.data.get_temp(id).unwrap_or(false));
+    let show = show_actions || was_hovered;
+
     let response = ui.scope(|ui| {
         ui.visuals_mut().override_text_color = if selected {
             Some(ui.visuals().selection.stroke.color)
@@ -50,11 +56,14 @@ pub fn url_row(
                             .title
                             .as_deref()
                             .unwrap_or(&record.canonical_url);
-                        ui.label(egui::RichText::new(title).strong());
-                        ui.label(
-                            egui::RichText::new(&record.canonical_url)
-                                .size(12.0)
-                                .color(ui.visuals().weak_text_color()),
+                        ui.add(egui::Label::new(egui::RichText::new(title).strong()).truncate());
+                        ui.add(
+                            egui::Label::new(
+                                egui::RichText::new(&record.canonical_url)
+                                    .size(12.0)
+                                    .color(ui.visuals().weak_text_color()),
+                            )
+                            .truncate(),
                         );
                     });
 
@@ -65,7 +74,7 @@ pub fn url_row(
                                 .color(ui.visuals().weak_text_color()),
                         );
 
-                        if show_actions {
+                        if show {
                             if ui.button("A").on_hover_text("Archive").clicked() {
                                 action = Some(ViewAction::Archive(record.id));
                             }
@@ -84,8 +93,9 @@ pub fn url_row(
             });
     });
 
-    // Treat hover or selection as "show actions"
-    let _hovered = response.response.hovered();
+    let is_hovered = response.response.hovered();
+    ui.ctx()
+        .memory_mut(|mem| mem.data.insert_temp(id, is_hovered));
 
     action
 }
