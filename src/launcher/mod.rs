@@ -1,6 +1,8 @@
 pub mod error;
 pub mod identity;
 pub mod info;
+#[allow(clippy::module_inception)]
+// Module name matches crate convention (launcher::launcher::Launcher).
 pub mod launcher;
 pub mod linux;
 pub mod macos;

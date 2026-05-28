@@ -1,5 +1,5 @@
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Child;
 
 use super::error::{DiscoveryError, LaunchError};
@@ -9,6 +9,12 @@ use super::platform::PlatformBrowser;
 
 /// macOS-specific browser discovery and launching.
 pub struct MacBrowser;
+
+impl Default for MacBrowser {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl MacBrowser {
     pub fn new() -> Self {
@@ -43,25 +49,25 @@ impl MacBrowser {
                     version: None,
                     is_default: false,
                 });
-            } else {
-                if let Ok(output) = std::process::Command::new("mdfind")
-                    .arg(format!("kMDItemCFBundleIdentifier == '{}'", bundle_id))
-                    .output()
-                {
-                    if output.status.success() {
-                        let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                        if !path.is_empty() {
-                            let path_buf = PathBuf::from(path);
-                            let executable = Self::find_executable_in_bundle(&path_buf);
-                            found.push(BrowserInfo {
-                                identity: identity.clone(),
-                                executable_path: executable.unwrap_or(path_buf),
-                                version: None,
-                                is_default: false,
-                            });
-                        }
-                    }
+            } else if let Ok(output) = std::process::Command::new("mdfind")
+                .arg(format!("kMDItemCFBundleIdentifier == '{}'", bundle_id))
+                .output()
+            {
+                if !output.status.success() {
+                    continue;
                 }
+                let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if path.is_empty() {
+                    continue;
+                }
+                let path_buf = PathBuf::from(path);
+                let executable = Self::find_executable_in_bundle(&path_buf);
+                found.push(BrowserInfo {
+                    identity: identity.clone(),
+                    executable_path: executable.unwrap_or(path_buf),
+                    version: None,
+                    is_default: false,
+                });
             }
         }
 
@@ -79,7 +85,7 @@ impl MacBrowser {
         }
     }
 
-    fn find_executable_in_bundle(bundle_path: &PathBuf) -> Option<PathBuf> {
+    fn find_executable_in_bundle(bundle_path: &Path) -> Option<PathBuf> {
         let contents = bundle_path.join("Contents/MacOS");
         if let Ok(entries) = std::fs::read_dir(contents) {
             for entry in entries.flatten() {

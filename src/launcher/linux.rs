@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 use std::io;
-use std::path::{Path, PathBuf};
 use std::process::Child;
 
 use super::error::{DiscoveryError, LaunchError};
@@ -10,6 +9,12 @@ use super::platform::PlatformBrowser;
 
 /// Linux-specific browser discovery and launching.
 pub struct LinuxBrowser;
+
+impl Default for LinuxBrowser {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl LinuxBrowser {
     pub fn new() -> Self {
@@ -57,20 +62,21 @@ impl PlatformBrowser for LinuxBrowser {
         let mut browsers = Self::discover_from_path();
 
         // Mark default if we can detect it via xdg-settings
-        if let Ok(output) = std::process::Command::new("xdg-settings")
+        let output = match std::process::Command::new("xdg-settings")
             .arg("get")
             .arg("default-web-browser")
             .output()
         {
-            if output.status.success() {
-                let default = String::from_utf8_lossy(&output.stdout);
-                let default_lower = default.trim().to_lowercase();
-                for browser in &mut browsers {
-                    let name = format!("{:?}", browser.identity).to_lowercase();
-                    if default_lower.contains(&name) {
-                        browser.is_default = true;
-                    }
-                }
+            Ok(o) if o.status.success() => o,
+            _ => return Ok(browsers),
+        };
+
+        let default = String::from_utf8_lossy(&output.stdout);
+        let default_lower = default.trim().to_lowercase();
+        for browser in &mut browsers {
+            let name = format!("{:?}", browser.identity).to_lowercase();
+            if default_lower.contains(&name) {
+                browser.is_default = true;
             }
         }
 
@@ -120,6 +126,8 @@ impl PlatformBrowser for LinuxBrowser {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use super::*;
 
     #[test]

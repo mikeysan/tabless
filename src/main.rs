@@ -137,7 +137,8 @@ fn main() {
                 let (tx, rx) = std::sync::mpsc::channel();
                 spawn_ipc_server(db_path.clone(), config, server, tx);
 
-                let storage = tabless::storage::Storage::open(&db_path).expect("failed to open storage");
+                let storage =
+                    tabless::storage::Storage::open(&db_path).expect("failed to open storage");
                 run_gui(storage, Some(rx));
             }
             Err(e) => {

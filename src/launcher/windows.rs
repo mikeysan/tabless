@@ -10,6 +10,12 @@ use super::platform::PlatformBrowser;
 /// Windows-specific browser discovery and launching.
 pub struct WindowsBrowser;
 
+impl Default for WindowsBrowser {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WindowsBrowser {
     pub fn new() -> Self {
         WindowsBrowser
@@ -41,23 +47,27 @@ impl WindowsBrowser {
                     .arg("/ve")
                     .output()
                 {
-                    if output.status.success() {
-                        let stdout = String::from_utf8_lossy(&output.stdout);
-                        if let Some(line) = stdout.lines().find(|l| l.contains("(Default)")) {
-                            if let Some(val) = line.split("REG_SZ").nth(1) {
-                                let path = val.trim().trim_matches('"').to_string();
-                                if !path.is_empty() {
-                                    found.push(BrowserInfo {
-                                        identity: identity.clone(),
-                                        executable_path: PathBuf::from(path),
-                                        version: None,
-                                        is_default: false,
-                                    });
-                                    break;
-                                }
-                            }
-                        }
+                    if !output.status.success() {
+                        continue;
                     }
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    let Some(line) = stdout.lines().find(|l| l.contains("(Default)")) else {
+                        continue;
+                    };
+                    let Some(val) = line.split("REG_SZ").nth(1) else {
+                        continue;
+                    };
+                    let path = val.trim().trim_matches('"').to_string();
+                    if path.is_empty() {
+                        continue;
+                    }
+                    found.push(BrowserInfo {
+                        identity: identity.clone(),
+                        executable_path: PathBuf::from(path),
+                        version: None,
+                        is_default: false,
+                    });
+                    break;
                 }
             }
         }
@@ -70,20 +80,21 @@ impl PlatformBrowser for WindowsBrowser {
     fn discover_browsers(&self) -> Result<Vec<BrowserInfo>, DiscoveryError> {
         let mut browsers = Self::discover_from_registry();
 
-        if let Ok(output) = std::process::Command::new("reg")
+        let output = match std::process::Command::new("reg")
             .arg("query")
             .arg("HKEY_CLASSES_ROOT\\http\\shell\\open\\command")
             .arg("/ve")
             .output()
         {
-            if output.status.success() {
-                let stdout = String::from_utf8_lossy(&output.stdout).to_lowercase();
-                for browser in &mut browsers {
-                    let name = format!("{:?}", browser.identity).to_lowercase();
-                    if stdout.contains(&name) {
-                        browser.is_default = true;
-                    }
-                }
+            Ok(o) if o.status.success() => o,
+            _ => return Ok(browsers),
+        };
+
+        let stdout = String::from_utf8_lossy(&output.stdout).to_lowercase();
+        for browser in &mut browsers {
+            let name = format!("{:?}", browser.identity).to_lowercase();
+            if stdout.contains(&name) {
+                browser.is_default = true;
             }
         }
 
