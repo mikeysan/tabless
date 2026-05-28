@@ -38,7 +38,7 @@ sudo apt-get install libx11-dev libwayland-dev libxkbcommon-dev libegl1-mesa-dev
 To register Tabless as the default handler for `tabless://` URLs:
 
 ```bash
-cargo run -- register-protocol
+cargo run --release -- register-protocol
 ```
 
 ### Platform-Specific Notes
