@@ -78,8 +78,11 @@ fn shutdown_ipc(
 ) {
     shutdown.store(true, Ordering::Relaxed);
     if let Ok(mut client) = IpcClient::connect(socket_path) {
-        let _ = client.send_url("tabless://shutdown");
-        let _ = handle.join();
+        if client.send_url("tabless://shutdown").is_ok() {
+            let _ = handle.join();
+        } else {
+            log::warn!("Failed to send shutdown sentinel; leaving thread to OS cleanup");
+        }
     } else {
         log::warn!("Failed to connect to IPC socket for shutdown; leaving thread to OS cleanup");
     }
