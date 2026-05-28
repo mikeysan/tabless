@@ -102,6 +102,10 @@ pub fn url_row(
     ui.ctx()
         .memory_mut(|mem| mem.data.insert_temp(id, is_hovered));
 
+    if response.response.double_clicked() {
+        action = Some(ViewAction::Launch(record.id));
+    }
+
     action
 }
 
