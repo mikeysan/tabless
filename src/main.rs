@@ -3,6 +3,18 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use tabless::launcher::{DefaultPlatform, Launcher, PlatformBrowser, UrlLauncher};
 use tabless::protocol::ipc::IpcClient;
 
+const SHUTDOWN_SENTINEL: &str = "tabless://shutdown";
+
+/// Ensures the IPC socket file is removed on scope exit,
+/// even if the IPC thread panics or fails to shut down cleanly.
+struct SocketGuard<'a>(&'a std::path::Path);
+
+impl Drop for SocketGuard<'_> {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(self.0);
+    }
+}
+
 fn build_launcher() -> Option<Box<dyn UrlLauncher>> {
     let platform = DefaultPlatform::new();
     let discovered = platform.discover_browsers().ok()?;
@@ -47,7 +59,7 @@ fn spawn_ipc_server(
         loop {
             match server.accept_url() {
                 Ok(url) => {
-                    if url == "tabless://shutdown" {
+                    if url == SHUTDOWN_SENTINEL {
                         break;
                     }
                     if let Err(e) = handler.handle_url(&url) {
@@ -78,7 +90,7 @@ fn shutdown_ipc(
 ) {
     shutdown.store(true, Ordering::Relaxed);
     if let Ok(mut client) = IpcClient::connect(socket_path) {
-        if client.send_url("tabless://shutdown").is_ok() {
+        if client.send_url(SHUTDOWN_SENTINEL).is_ok() {
             let _ = handle.join();
         } else {
             log::warn!("Failed to send shutdown sentinel; leaving thread to OS cleanup");
@@ -143,6 +155,7 @@ fn main() {
                 let (tx, rx) = std::sync::mpsc::channel();
                 let socket_path = config.socket_path();
                 let (handle, shutdown) = spawn_ipc_server(db_path.clone(), config, server, tx);
+                let _guard = SocketGuard(&socket_path);
 
                 let storage =
                     tabless::storage::Storage::open(&db_path).expect("failed to open storage");
@@ -174,6 +187,7 @@ fn main() {
             Ok(tabless::protocol::SingleInstance::First(server)) => {
                 let (tx, rx) = std::sync::mpsc::channel();
                 let (handle, shutdown) = spawn_ipc_server(db_path.clone(), config, server, tx);
+                let _guard = SocketGuard(&socket_path);
 
                 let storage =
                     tabless::storage::Storage::open(&db_path).expect("failed to open storage");

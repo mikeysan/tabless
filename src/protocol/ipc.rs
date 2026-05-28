@@ -120,6 +120,22 @@ mod tests {
     use std::thread;
 
     #[test]
+    fn drop_removes_socket_file() {
+        let tmp_dir =
+            std::env::temp_dir().join(format!("tabless-drop-test-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&tmp_dir);
+        let socket_path = tmp_dir.join("drop.sock");
+
+        {
+            let server = IpcServer::bind(&socket_path).unwrap();
+            assert!(socket_path.exists());
+            drop(server);
+        }
+
+        assert!(!socket_path.exists());
+    }
+
+    #[test]
     fn roundtrip_url() {
         let tmp_dir = std::env::temp_dir().join(format!("tabless-test-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&tmp_dir);
