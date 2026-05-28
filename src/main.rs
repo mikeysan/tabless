@@ -64,6 +64,24 @@ fn spawn_ipc_server(
     (handle, shutdown)
 }
 
+/// Shut down the IPC server thread gracefully.
+///
+/// Connecting to the socket is only done to unblock the server's blocking
+/// `accept()` call; the URL content is irrelevant and never processed.
+fn shutdown_ipc(
+    shutdown: &AtomicBool,
+    socket_path: &std::path::Path,
+    handle: std::thread::JoinHandle<()>,
+) {
+    shutdown.store(true, Ordering::Relaxed);
+    if let Ok(mut client) = IpcClient::connect(socket_path) {
+        let _ = client.send_url("tabless://shutdown");
+        let _ = handle.join();
+    } else {
+        log::warn!("Failed to connect to IPC socket for shutdown; leaving thread to OS cleanup");
+    }
+}
+
 fn run_gui(storage: tabless::storage::Storage, ipc_rx: Option<std::sync::mpsc::Receiver<()>>) {
     let launcher = build_launcher();
     let app = tabless::ui::app::TablessApp::new(storage, launcher, ipc_rx);
@@ -124,11 +142,7 @@ fn main() {
                     tabless::storage::Storage::open(&db_path).expect("failed to open storage");
                 run_gui(storage, Some(rx));
 
-                shutdown.store(true, Ordering::Relaxed);
-                if let Ok(mut client) = IpcClient::connect(&socket_path) {
-                    let _ = client.send_url("tabless://shutdown");
-                }
-                let _ = handle.join();
+                shutdown_ipc(&shutdown, &socket_path, handle);
             }
             Ok(tabless::protocol::RunOutcome::UrlForwarded) => {
                 // Silent exit
@@ -159,11 +173,7 @@ fn main() {
                     tabless::storage::Storage::open(&db_path).expect("failed to open storage");
                 run_gui(storage, Some(rx));
 
-                shutdown.store(true, Ordering::Relaxed);
-                if let Ok(mut client) = IpcClient::connect(&socket_path) {
-                    let _ = client.send_url("tabless://shutdown");
-                }
-                let _ = handle.join();
+                shutdown_ipc(&shutdown, &socket_path, handle);
             }
             Err(e) => {
                 log::error!("Single instance check failed: {}", e);
