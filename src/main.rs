@@ -129,18 +129,21 @@ fn main() {
         };
         let socket_path = config.socket_path();
 
-        let server = match tabless::protocol::ipc::IpcServer::bind(&socket_path) {
-            Ok(s) => s,
+        match tabless::protocol::SingleInstance::new(&socket_path) {
+            Ok(tabless::protocol::SingleInstance::Subsequent(_client)) => {
+                // Another instance is already running; silently exit.
+            }
+            Ok(tabless::protocol::SingleInstance::First(server)) => {
+                let (tx, rx) = std::sync::mpsc::channel();
+                spawn_ipc_server(db_path.clone(), config, server, tx);
+
+                let storage = tabless::storage::Storage::open(&db_path).expect("failed to open storage");
+                run_gui(storage, Some(rx));
+            }
             Err(e) => {
-                eprintln!("Failed to bind IPC server: {}", e);
+                eprintln!("Single instance check failed: {}", e);
                 std::process::exit(1);
             }
-        };
-
-        let (tx, rx) = std::sync::mpsc::channel();
-        spawn_ipc_server(db_path.clone(), config, server, tx);
-
-        let storage = tabless::storage::Storage::open(&db_path).expect("failed to open storage");
-        run_gui(storage, Some(rx));
+        }
     }
 }

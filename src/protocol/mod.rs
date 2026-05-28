@@ -5,6 +5,7 @@ pub mod registration;
 pub mod single_instance;
 
 pub use error::ProtocolError;
+pub use single_instance::SingleInstance;
 
 use std::path::PathBuf;
 
@@ -13,7 +14,6 @@ use crate::url::ValidatedUrl;
 
 use self::ipc::IpcServer;
 use self::parse::parse_protocol_url;
-use self::single_instance::SingleInstance;
 
 #[derive(Clone)]
 pub struct ProtocolConfig {
