@@ -6,11 +6,28 @@ use tabless::protocol::parse::parse_protocol_url;
 use tabless::storage::Storage;
 use tabless::url::ValidatedUrl;
 
+fn test_socket_path(name: &str) -> std::path::PathBuf {
+    #[cfg(unix)]
+    {
+        let tmp =
+            std::env::temp_dir().join(format!("tabless-e2e-{name}-{}-test", std::process::id()));
+        let _ = std::fs::create_dir_all(&tmp);
+        tmp.join("test.sock")
+    }
+    #[cfg(windows)]
+    {
+        std::path::PathBuf::from(format!(
+            r"\\.\pipe\tabless-e2e-{name}-{}",
+            std::process::id()
+        ))
+    }
+}
+
 #[test]
 fn end_to_end_single_instance_and_storage() {
     let tmpdir = std::env::temp_dir().join(format!("tabless-e2e-{}", std::process::id()));
     let _ = std::fs::create_dir_all(&tmpdir);
-    let socket_path = tmpdir.join("tabless.ipc");
+    let socket_path = test_socket_path("protocol");
     let db_path = tmpdir.join("e2e.db");
 
     // First instance: bind server, store first URL, accept one forwarded URL

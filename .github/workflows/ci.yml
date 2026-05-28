@@ -62,10 +62,8 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - uses: rustsec/audit-check@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          create-issues: false
+      - name: Run cargo audit
+        run: cargo audit
 
   deny:
     runs-on: ubuntu-latest
