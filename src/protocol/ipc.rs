@@ -115,4 +115,38 @@ mod tests {
         let received = handle.join().unwrap();
         assert_eq!(received, expected_url);
     }
+
+    #[test]
+    fn ipc_delivery_persists_url() {
+        use crate::storage::Storage;
+        use crate::url::ValidatedUrl;
+
+        let tmp_dir = std::env::temp_dir()
+            .join(format!("tabless-ipc-db-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&tmp_dir);
+        let db_path = tmp_dir.join("test.db");
+        let _ = std::fs::remove_file(&db_path);
+
+        let socket_path = tmp_dir.join("ipc.sock");
+
+        let server = IpcServer::bind(&socket_path).unwrap();
+        let db_for_thread = db_path.clone();
+
+        let handle = std::thread::spawn(move || {
+            let url = server.accept_url().unwrap();
+            let storage = Storage::open(&db_for_thread).unwrap();
+            let validated = ValidatedUrl::parse(&url).unwrap();
+            storage.urls().insert(&validated, None).unwrap();
+        });
+
+        let mut client = IpcClient::connect(&socket_path).unwrap();
+        client.send_url("https://example.com").unwrap();
+
+        handle.join().unwrap();
+
+        let storage = Storage::open(&db_path).unwrap();
+        let urls = storage.urls().list_inbox().unwrap();
+        assert_eq!(urls.len(), 1);
+        assert_eq!(urls[0].canonical_url, "https://example.com/");
+    }
 }
