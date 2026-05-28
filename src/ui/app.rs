@@ -38,7 +38,9 @@ impl TablessApp {
             }
             Err(e) => {
                 eprintln!("Failed to load inbox: {}", e);
-                self.error_message = Some(format!("Failed to load inbox: {}", e));
+                if self.error_message.is_none() {
+                    self.error_message = Some(format!("Failed to load inbox: {}", e));
+                }
             }
         }
     }
@@ -89,18 +91,22 @@ impl TablessApp {
             self.refresh_urls();
         }
     }
+
+    fn drain_ipc(&mut self) -> bool {
+        let mut notified = false;
+        if let Some(ref rx) = self.ipc_rx {
+            while let Ok(()) = rx.try_recv() {
+                notified = true;
+            }
+        }
+        notified
+    }
 }
 
 impl App for TablessApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // Drain IPC notifications and refresh when new URLs arrive
-        let mut ipc_notified = false;
-        if let Some(ref rx) = self.ipc_rx {
-            while rx.try_recv().is_ok() {
-                ipc_notified = true;
-            }
-        }
-        if ipc_notified {
+        if self.drain_ipc() {
             self.refresh_urls();
         }
 
@@ -225,7 +231,7 @@ mod tests {
     }
 
     #[test]
-    fn launch_action_records_launch_attempt() {
+    fn launch_action_invokes_launcher() {
         use std::sync::{Arc, Mutex};
 
         struct MockLauncher {
@@ -258,6 +264,56 @@ mod tests {
     }
 
     #[test]
+    fn launch_action_with_no_launcher_shows_error() {
+        let db_path = temp_db_path();
+        let storage = Storage::open(&db_path).unwrap();
+        let url = ValidatedUrl::parse("https://example.com").unwrap();
+        let id = storage.urls().insert(&url, Some("Example")).unwrap();
+
+        let mut app = TablessApp::new(storage, None, None);
+        app.apply_actions(vec![ViewAction::Launch(id)]);
+
+        assert_eq!(app.error_message, Some("No browser configured".to_string()));
+    }
+
+    #[test]
+    fn launch_action_with_failing_launcher_shows_error() {
+        use crate::launcher::LaunchError;
+
+        struct FailingLauncher;
+
+        impl crate::launcher::UrlLauncher for FailingLauncher {
+            fn launch(&self, _url: &str) -> Result<(), LaunchError> {
+                Err(LaunchError::BrowserNotFound {
+                    identity: crate::launcher::BrowserIdentity::Firefox,
+                })
+            }
+        }
+
+        let db_path = temp_db_path();
+        let storage = Storage::open(&db_path).unwrap();
+        let url = ValidatedUrl::parse("https://example.com").unwrap();
+        let id = storage.urls().insert(&url, Some("Example")).unwrap();
+
+        let mut app = TablessApp::new(storage, Some(Box::new(FailingLauncher)), None);
+        app.apply_actions(vec![ViewAction::Launch(id)]);
+
+        assert!(app.error_message.as_ref().unwrap().contains("Launch failed"));
+    }
+
+    #[test]
+    fn launch_action_with_missing_id_is_graceful() {
+        let db_path = temp_db_path();
+        let storage = Storage::open(&db_path).unwrap();
+
+        let mut app = TablessApp::new(storage, None, None);
+        app.apply_actions(vec![ViewAction::Launch(9999)]);
+
+        // Should not panic and should not set an error message
+        assert!(app.error_message.is_none());
+    }
+
+    #[test]
     fn ipc_notification_refreshes_urls() {
         let db_path = temp_db_path();
         let storage = Storage::open(&db_path).unwrap();
@@ -275,13 +331,7 @@ mod tests {
         tx.send(()).unwrap();
 
         // Trigger update (normally called by eframe; we call the logic directly)
-        let mut ipc_notified = false;
-        if let Some(ref rx) = app.ipc_rx {
-            while rx.try_recv().is_ok() {
-                ipc_notified = true;
-            }
-        }
-        if ipc_notified {
+        if app.drain_ipc() {
             app.refresh_urls();
         }
 
