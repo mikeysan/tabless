@@ -15,6 +15,7 @@ use self::ipc::IpcServer;
 use self::parse::parse_protocol_url;
 use self::single_instance::SingleInstance;
 
+#[derive(Clone)]
 pub struct ProtocolConfig {
     pub scheme: &'static str,
     pub binary_path: PathBuf,
@@ -28,7 +29,7 @@ impl ProtocolConfig {
 }
 
 pub enum RunOutcome {
-    FirstInstance,
+    FirstInstance(IpcServer),
     UrlForwarded,
 }
 
@@ -63,22 +64,9 @@ impl ProtocolHandler {
             }
             SingleInstance::First(server) => {
                 self.handle_url(protocol_url)?;
-                self.run_server(server)?;
-                Ok(RunOutcome::FirstInstance)
+                Ok(RunOutcome::FirstInstance(server))
             }
         }
     }
 
-    fn run_server(&self, server: IpcServer) -> Result<(), ProtocolError> {
-        loop {
-            match server.accept_url() {
-                Ok(url) => {
-                    let _ = self.handle_url(&url);
-                }
-                Err(e) => {
-                    eprintln!("IPC accept error: {}", e);
-                }
-            }
-        }
-    }
 }
