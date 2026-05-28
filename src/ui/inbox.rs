@@ -83,7 +83,11 @@ pub fn inbox_view(
 
     if filtered.is_empty() {
         ui.centered_and_justified(|ui| {
-            ui.label("No URLs captured yet. Open a link to get started.");
+            if items.is_empty() {
+                ui.label("No URLs captured yet. Open a link to get started.");
+            } else {
+                ui.label("No URLs match your search.");
+            }
         });
         return actions;
     }
