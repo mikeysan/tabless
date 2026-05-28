@@ -10,6 +10,7 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 sublime_fuzzy = "0.7"
 which = "7.0"
 interprocess = "2"
+egui = "0.31"
 eframe = { version = "0.31", default-features = false, features = ["glow", "default_fonts", "x11", "wayland"] }
 winit = { version = "0.30", default-features = false, features = ["wayland-dlopen", "wayland-csd-adwaita"] }
 
