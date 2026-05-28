@@ -1,15 +1,73 @@
-use std::env;
-use std::path::PathBuf;
+use tabless::launcher::{DefaultPlatform, Launcher, PlatformBrowser, UrlLauncher};
 
-use tabless::protocol::{ProtocolConfig, ProtocolHandler, RunOutcome};
-use tabless::storage::Storage;
-use tabless::ui::app::TablessApp;
+fn build_launcher() -> Option<Box<dyn UrlLauncher>> {
+    let platform = DefaultPlatform::new();
+    let discovered = platform.discover_browsers().ok()?;
+    let mut launcher = Launcher::new(platform, discovered);
+    let defaults: Vec<_> = launcher.registry().all_browsers()
+        .into_iter()
+        .filter(|info| info.is_default)
+        .map(|info| info.identity.clone())
+        .collect();
+    for identity in defaults {
+        let _ = launcher.registry_mut().set_preferred(identity);
+    }
+    Some(Box::new(launcher))
+}
+
+fn spawn_ipc_server(db_path: std::path::PathBuf, config: tabless::protocol::ProtocolConfig, server: tabless::protocol::ipc::IpcServer, tx: std::sync::mpsc::Sender<()>) {
+    std::thread::spawn(move || {
+        let storage = match tabless::storage::Storage::open(&db_path) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("IPC thread failed to open storage: {}", e);
+                return;
+            }
+        };
+        let handler = match tabless::protocol::ProtocolHandler::new(config, storage) {
+            Ok(h) => h,
+            Err(e) => {
+                eprintln!("IPC thread failed to create handler: {}", e);
+                return;
+            }
+        };
+        loop {
+            match server.accept_url() {
+                Ok(url) => {
+                    if let Err(e) = handler.handle_url(&url) {
+                        eprintln!("IPC handle error: {}", e);
+                    }
+                    let _ = tx.send(());
+                }
+                Err(e) => {
+                    eprintln!("IPC accept error: {}", e);
+                }
+            }
+        }
+    });
+}
+
+fn run_gui(storage: tabless::storage::Storage, ipc_rx: Option<std::sync::mpsc::Receiver<()>>) {
+    let launcher = build_launcher();
+    let app = tabless::ui::app::TablessApp::new(storage, launcher, ipc_rx);
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size([800.0, 600.0]),
+        ..Default::default()
+    };
+    eframe::run_native(
+        "Tabless",
+        options,
+        Box::new(|_cc| Ok(Box::new(app) as Box<dyn eframe::App>)),
+    )
+    .expect("failed to run eframe");
+}
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
+    let args: Vec<String> = std::env::args().collect();
 
     if args.len() > 1 && args[1] == "register-protocol" {
-        let binary_path = env::current_exe().expect("failed to get current executable path");
+        let binary_path = std::env::current_exe().expect("failed to get current executable path");
         match tabless::protocol::registration::register_protocol(&binary_path) {
             Ok(()) => println!("Protocol registered successfully."),
             Err(e) => eprintln!("Registration failed: {}", e),
@@ -26,22 +84,26 @@ fn main() {
     let db_path = data_dir.join("tabless.db");
 
     if let Some(url) = protocol_url {
-        let storage = Storage::open(&db_path).expect("failed to open storage");
+        let storage = tabless::storage::Storage::open(&db_path).expect("failed to open storage");
 
-        let config = ProtocolConfig {
+        let config = tabless::protocol::ProtocolConfig {
             scheme: "tabless",
-            binary_path: env::current_exe().unwrap_or_else(|_| PathBuf::from("tabless")),
+            binary_path: std::env::current_exe().unwrap_or_else(|_| std::path::PathBuf::from("tabless")),
             data_dir,
         };
 
-        let handler = ProtocolHandler::new(config, storage).expect("failed to create handler");
+        let handler = tabless::protocol::ProtocolHandler::new(config.clone(), storage)
+            .expect("failed to create handler");
 
         match handler.run(url) {
-            Ok(tabless::protocol::RunOutcome::FirstInstance(_server)) => {
-                // TODO: spawn GUI before starting server loop (requires IPC server on background thread)
-                // Server loop blocks until interrupted
+            Ok(tabless::protocol::RunOutcome::FirstInstance(server)) => {
+                let (tx, rx) = std::sync::mpsc::channel();
+                spawn_ipc_server(db_path.clone(), config, server, tx);
+
+                let storage = tabless::storage::Storage::open(&db_path).expect("failed to open storage");
+                run_gui(storage, Some(rx));
             }
-            Ok(RunOutcome::UrlForwarded) => {
+            Ok(tabless::protocol::RunOutcome::UrlForwarded) => {
                 // Silent exit
             }
             Err(e) => {
@@ -50,18 +112,7 @@ fn main() {
             }
         }
     } else {
-        let storage = Storage::open(&db_path).expect("failed to open storage");
-        let app = TablessApp::new(storage, None, None);
-        let options = eframe::NativeOptions {
-            viewport: egui::ViewportBuilder::default()
-                .with_inner_size([800.0, 600.0]),
-            ..Default::default()
-        };
-        eframe::run_native(
-            "Tabless",
-            options,
-            Box::new(|_cc| Ok(Box::new(app) as Box<dyn eframe::App>)),
-        )
-        .expect("failed to run eframe");
+        let storage = tabless::storage::Storage::open(&db_path).expect("failed to open storage");
+        run_gui(storage, None);
     }
 }
