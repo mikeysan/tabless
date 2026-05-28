@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use tabless::protocol::{ProtocolConfig, ProtocolHandler, RunOutcome};
 use tabless::storage::Storage;
+use tabless::ui::app::TablessApp;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -18,14 +19,13 @@ fn main() {
 
     let protocol_url = args.get(1).filter(|s| s.starts_with("tabless://"));
 
+    let data_dir = dirs::data_local_dir()
+        .expect("failed to determine data directory")
+        .join("tabless");
+    std::fs::create_dir_all(&data_dir).expect("failed to create data directory");
+    let db_path = data_dir.join("tabless.db");
+
     if let Some(url) = protocol_url {
-        let data_dir = dirs::data_local_dir()
-            .expect("failed to determine data directory")
-            .join("tabless");
-
-        std::fs::create_dir_all(&data_dir).expect("failed to create data directory");
-
-        let db_path = data_dir.join("tabless.db");
         let storage = Storage::open(&db_path).expect("failed to open storage");
 
         let config = ProtocolConfig {
@@ -41,7 +41,7 @@ fn main() {
                 // Server loop blocks until interrupted
             }
             Ok(RunOutcome::UrlForwarded) => {
-                // Silent exit — URL forwarded to running instance
+                // Silent exit
             }
             Err(e) => {
                 eprintln!("Protocol handling failed: {}", e);
@@ -49,6 +49,18 @@ fn main() {
             }
         }
     } else {
-        println!("tabless - URL capture and launch utility");
+        let storage = Storage::open(&db_path).expect("failed to open storage");
+        let app = TablessApp::new(storage);
+        let options = eframe::NativeOptions {
+            viewport: egui::ViewportBuilder::default()
+                .with_inner_size([800.0, 600.0]),
+            ..Default::default()
+        };
+        eframe::run_native(
+            "Tabless",
+            options,
+            Box::new(|_cc| Ok(Box::new(app) as Box<dyn eframe::App>)),
+        )
+        .expect("failed to run eframe");
     }
 }
