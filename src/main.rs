@@ -37,7 +37,7 @@ fn main() {
         let handler = ProtocolHandler::new(config, storage).expect("failed to create handler");
 
         match handler.run(url) {
-            Ok(RunOutcome::FirstInstance) => {
+            Ok(tabless::protocol::RunOutcome::FirstInstance(_server)) => {
                 // TODO: spawn GUI before starting server loop (requires IPC server on background thread)
                 // Server loop blocks until interrupted
             }
@@ -51,7 +51,7 @@ fn main() {
         }
     } else {
         let storage = Storage::open(&db_path).expect("failed to open storage");
-        let app = TablessApp::new(storage);
+        let app = TablessApp::new(storage, None, None);
         let options = eframe::NativeOptions {
             viewport: egui::ViewportBuilder::default()
                 .with_inner_size([800.0, 600.0]),
