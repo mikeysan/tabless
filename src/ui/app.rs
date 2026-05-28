@@ -25,7 +25,10 @@ impl TablessApp {
 
     pub fn refresh_urls(&mut self) {
         match self.storage.urls().list_inbox() {
-            Ok(urls) => self.urls = urls,
+            Ok(urls) => {
+                self.urls = urls;
+                self.error_message = None;
+            }
             Err(e) => {
                 eprintln!("Failed to load inbox: {}", e);
                 self.error_message = Some(format!("Failed to load inbox: {}", e));
@@ -34,6 +37,7 @@ impl TablessApp {
     }
 
     pub fn apply_actions(&mut self, actions: Vec<ViewAction>) {
+        self.error_message = None;
         for action in actions {
             let result = match action {
                 ViewAction::Archive(id) => self.storage.urls().set_archived(id, true),
@@ -64,35 +68,42 @@ impl TablessApp {
 
 impl App for TablessApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        if ctx.input(|i| i.key_pressed(egui::Key::ArrowUp)) {
-            self.inbox_state.navigate_up(self.urls.len());
-        }
-        if ctx.input(|i| i.key_pressed(egui::Key::ArrowDown)) {
-            self.inbox_state.navigate_down(self.urls.len());
-        }
-        if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
-            if let Some(record) = self.urls.get(self.inbox_state.selected_index) {
-                self.apply_actions(vec![ViewAction::Launch(record.id)]);
+        let actions = {
+            let filtered = self.inbox_state.filtered_items(&self.urls);
+
+            if ctx.input(|i| i.key_pressed(egui::Key::ArrowUp)) {
+                self.inbox_state.navigate_up(filtered.len());
             }
-        }
-        if ctx.input(|i| i.key_pressed(egui::Key::A)) {
-            if let Some(record) = self.urls.get(self.inbox_state.selected_index) {
-                self.apply_actions(vec![ViewAction::Archive(record.id)]);
+            if ctx.input(|i| i.key_pressed(egui::Key::ArrowDown)) {
+                self.inbox_state.navigate_down(filtered.len());
             }
-        }
-        if ctx.input(|i| i.key_pressed(egui::Key::P)) {
-            if let Some(record) = self.urls.get(self.inbox_state.selected_index) {
-                self.apply_actions(vec![ViewAction::Pin(record.id)]);
+
+            let mut actions = Vec::new();
+            if let Some(record) = filtered.get(self.inbox_state.selected_index) {
+                if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
+                    actions.push(ViewAction::Launch(record.id));
+                }
+                if ctx.input(|i| i.key_pressed(egui::Key::A)) {
+                    actions.push(ViewAction::Archive(record.id));
+                }
+                if ctx.input(|i| i.key_pressed(egui::Key::P)) {
+                    actions.push(ViewAction::Pin(record.id));
+                }
+                if ctx.input(|i| i.key_pressed(egui::Key::D)) {
+                    actions.push(ViewAction::Delete(record.id));
+                }
             }
-        }
-        if ctx.input(|i| i.key_pressed(egui::Key::D)) {
-            if let Some(record) = self.urls.get(self.inbox_state.selected_index) {
-                self.apply_actions(vec![ViewAction::Delete(record.id)]);
+
+            if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                self.inbox_state.search_query.clear();
+                self.inbox_state.selected_index = 0;
             }
-        }
-        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-            self.inbox_state.search_query.clear();
-            self.inbox_state.selected_index = 0;
+
+            actions
+        };
+
+        if !actions.is_empty() {
+            self.apply_actions(actions);
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -103,9 +114,9 @@ impl App for TablessApp {
                 ui.colored_label(egui::Color32::RED, msg);
             }
 
-            let actions = inbox_view(ui, &mut self.inbox_state, &self.urls);
-            if !actions.is_empty() {
-                self.apply_actions(actions);
+            let view_actions = inbox_view(ui, &mut self.inbox_state, &self.urls);
+            if !view_actions.is_empty() {
+                self.apply_actions(view_actions);
             }
         });
     }
