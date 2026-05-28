@@ -49,13 +49,14 @@ impl MacBrowser {
                     version: None,
                     is_default: false,
                 });
-            } else if let Ok(output) = std::process::Command::new("mdfind")
-                .arg(format!("kMDItemCFBundleIdentifier == '{}'", bundle_id))
-                .output()
-            {
-                if !output.status.success() {
-                    continue;
-                }
+            } else {
+                let output = match std::process::Command::new("mdfind")
+                    .arg(format!("kMDItemCFBundleIdentifier == '{}'", bundle_id))
+                    .output()
+                {
+                    Ok(o) if o.status.success() => o,
+                    _ => continue,
+                };
                 let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
                 if path.is_empty() {
                     continue;

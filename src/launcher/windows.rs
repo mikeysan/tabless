@@ -41,34 +41,33 @@ impl WindowsBrowser {
                     "{}\\SOFTWARE\\Clients\\StartMenuInternet\\{}\\shell\\open\\command",
                     hive, reg_name
                 );
-                if let Ok(output) = std::process::Command::new("reg")
+                let output = match std::process::Command::new("reg")
                     .arg("query")
                     .arg(&key)
                     .arg("/ve")
                     .output()
                 {
-                    if !output.status.success() {
-                        continue;
-                    }
-                    let stdout = String::from_utf8_lossy(&output.stdout);
-                    let Some(line) = stdout.lines().find(|l| l.contains("(Default)")) else {
-                        continue;
-                    };
-                    let Some(val) = line.split("REG_SZ").nth(1) else {
-                        continue;
-                    };
-                    let path = val.trim().trim_matches('"').to_string();
-                    if path.is_empty() {
-                        continue;
-                    }
-                    found.push(BrowserInfo {
-                        identity: identity.clone(),
-                        executable_path: PathBuf::from(path),
-                        version: None,
-                        is_default: false,
-                    });
-                    break;
+                    Ok(o) if o.status.success() => o,
+                    _ => continue,
+                };
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let Some(line) = stdout.lines().find(|l| l.contains("(Default)")) else {
+                    continue;
+                };
+                let Some(val) = line.split("REG_SZ").nth(1) else {
+                    continue;
+                };
+                let path = val.trim().trim_matches('"').to_string();
+                if path.is_empty() {
+                    continue;
                 }
+                found.push(BrowserInfo {
+                    identity: identity.clone(),
+                    executable_path: PathBuf::from(path),
+                    version: None,
+                    is_default: false,
+                });
+                break;
             }
         }
 

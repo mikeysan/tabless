@@ -14,8 +14,6 @@ pub trait PlatformBrowser: Send + Sync {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::launcher::identity::BrowserIdentity;
-    use std::path::PathBuf;
 
     struct DummyPlatform;
 

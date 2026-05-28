@@ -156,7 +156,7 @@ mod tests {
         };
         let result = browser.launch_url(&info, "https://example.com");
         assert!(
-            matches!(result, Err(LaunchError::InvalidExecutable { path, .. }) if path == PathBuf::from("/does/not/exist"))
+            matches!(result, Err(LaunchError::InvalidExecutable { path, .. }) if path == std::path::Path::new("/does/not/exist"))
         );
     }
 }
