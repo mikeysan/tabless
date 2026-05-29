@@ -294,45 +294,45 @@ impl App for TablessApp {
             .and_then(|id| filtered.iter().find(|r| r.id == id).copied())
             .or_else(|| filtered.get(self.main_list_state.selected_index).copied());
 
-        if !ctx.wants_keyboard_input() {
-            if let Some(record) = target_record {
-                if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
-                    actions.push(ViewAction::Launch(record.id));
+        if !ctx.wants_keyboard_input()
+            && let Some(record) = target_record
+        {
+            if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
+                actions.push(ViewAction::Launch(record.id));
+            }
+            if ctx.input(|i| i.key_pressed(egui::Key::L)) {
+                actions.push(ViewAction::Launch(record.id));
+            }
+            if ctx.input(|i| i.key_pressed(egui::Key::C)) {
+                actions.push(ViewAction::Copy(record.id));
+            }
+            if self.archive_view {
+                if ctx.input(|i| i.key_pressed(egui::Key::R)) {
+                    actions.push(ViewAction::Restore(record.id));
                 }
-                if ctx.input(|i| i.key_pressed(egui::Key::L)) {
-                    actions.push(ViewAction::Launch(record.id));
+            } else {
+                if ctx.input(|i| i.key_pressed(egui::Key::A)) {
+                    actions.push(ViewAction::Archive(record.id));
                 }
-                if ctx.input(|i| i.key_pressed(egui::Key::C)) {
-                    actions.push(ViewAction::Copy(record.id));
-                }
-                if self.archive_view {
-                    if ctx.input(|i| i.key_pressed(egui::Key::R)) {
-                        actions.push(ViewAction::Restore(record.id));
-                    }
-                } else {
-                    if ctx.input(|i| i.key_pressed(egui::Key::A)) {
-                        actions.push(ViewAction::Archive(record.id));
-                    }
-                    if ctx.input(|i| i.key_pressed(egui::Key::F)) {
-                        if record.favorite {
-                            actions.push(ViewAction::Unfavorite(record.id));
-                        } else {
-                            actions.push(ViewAction::Favorite(record.id));
-                        }
-                    }
+                if ctx.input(|i| i.key_pressed(egui::Key::F)) {
                     if record.favorite {
-                        if ctx.input(|i| i.key_pressed(egui::Key::ArrowUp) && i.modifiers.shift) {
-                            actions.push(ViewAction::MoveFavoriteUp(record.id));
-                        }
-                        if ctx.input(|i| i.key_pressed(egui::Key::ArrowDown) && i.modifiers.shift) {
-                            actions.push(ViewAction::MoveFavoriteDown(record.id));
-                        }
+                        actions.push(ViewAction::Unfavorite(record.id));
+                    } else {
+                        actions.push(ViewAction::Favorite(record.id));
                     }
                 }
-                if ctx.input(|i| i.key_pressed(egui::Key::Enter) && i.modifiers.shift) {
-                    self.show_browser_picker = true;
-                    self.browser_picker_id = Some(record.id);
+                if record.favorite {
+                    if ctx.input(|i| i.key_pressed(egui::Key::ArrowUp) && i.modifiers.shift) {
+                        actions.push(ViewAction::MoveFavoriteUp(record.id));
+                    }
+                    if ctx.input(|i| i.key_pressed(egui::Key::ArrowDown) && i.modifiers.shift) {
+                        actions.push(ViewAction::MoveFavoriteDown(record.id));
+                    }
                 }
+            }
+            if ctx.input(|i| i.key_pressed(egui::Key::Enter) && i.modifiers.shift) {
+                self.show_browser_picker = true;
+                self.browser_picker_id = Some(record.id);
             }
         }
 
