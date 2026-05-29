@@ -87,7 +87,7 @@ mod tests {
 
     #[test]
     fn launch_fails_when_no_preferred_set() {
-        let launcher = make_launcher();
+        let launcher = Launcher::new(MockPlatform::new(vec![]), vec![]);
         let result = launcher.launch("https://example.com");
         assert!(matches!(result, Err(LaunchError::NoPreferredBrowser)));
     }
