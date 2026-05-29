@@ -1,5 +1,5 @@
 use std::process::Child;
-use std::sync::mpsc::{channel, Sender};
+use std::sync::mpsc::{Sender, channel};
 use std::thread;
 
 pub mod error;

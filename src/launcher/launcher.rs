@@ -1,11 +1,11 @@
 use std::process::Child;
 
+use super::ChildReaper;
 use super::error::LaunchError;
 use super::identity::BrowserIdentity;
 use super::info::BrowserInfo;
 use super::platform::PlatformBrowser;
 use super::registry::BrowserRegistry;
-use super::ChildReaper;
 
 pub struct Launcher<P: PlatformBrowser> {
     platform: P,
@@ -16,7 +16,11 @@ pub struct Launcher<P: PlatformBrowser> {
 impl<P: PlatformBrowser> Launcher<P> {
     pub fn new(platform: P, discovered: Vec<BrowserInfo>) -> Self {
         let registry = BrowserRegistry::new(discovered);
-        Launcher { platform, registry, reaper: ChildReaper::new() }
+        Launcher {
+            platform,
+            registry,
+            reaper: ChildReaper::new(),
+        }
     }
 
     pub fn registry(&self) -> &BrowserRegistry {
