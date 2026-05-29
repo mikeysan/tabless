@@ -24,7 +24,7 @@ impl FuzzySearchIndex {
 
     pub fn rebuild(&mut self, repo: &UrlRepository) -> Result<(), StorageError> {
         self.candidates.clear();
-        let urls = repo.list_inbox()?;
+        let urls = repo.list_main()?;
         for url in urls {
             self.candidates.push(url.canonical_url.clone());
             if let Some(title) = url.title {

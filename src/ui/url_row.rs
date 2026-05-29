@@ -71,7 +71,7 @@ pub fn url_row(
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.label(
-                            egui::RichText::new(format_relative_timestamp(record.created_at))
+                            egui::RichText::new(format_relative_timestamp(record.updated_at))
                                 .size(11.0)
                                 .color(ui.visuals().weak_text_color()),
                         );
@@ -83,8 +83,14 @@ pub fn url_row(
                             if ui.button("L").on_hover_text("Launch").clicked() {
                                 action = Some(ViewAction::Launch(record.id));
                             }
-                            if ui.button("P").on_hover_text("Pin").clicked() {
-                                action = Some(ViewAction::Pin(record.id));
+                            if record.pinned {
+                                if ui.button("U").on_hover_text("Unfavorite").clicked() {
+                                    action = Some(ViewAction::Unpin(record.id));
+                                }
+                            } else {
+                                if ui.button("P").on_hover_text("Pin").clicked() {
+                                    action = Some(ViewAction::Pin(record.id));
+                                }
                             }
                             if ui.button("A").on_hover_text("Archive").clicked() {
                                 action = Some(ViewAction::Archive(record.id));

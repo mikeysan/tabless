@@ -31,22 +31,24 @@ impl<'a> UrlRepository<'a> {
         self.conn
             .execute(
                 "INSERT INTO urls (canonical_url, original_url, title, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                 VALUES (?1, ?2, ?3, ?4, ?5)
+                 ON CONFLICT(canonical_url) DO UPDATE SET updated_at = excluded.updated_at",
                 params![url.canonical(), url.original(), title, now, now],
             )
-            .map_err(|e| {
-                if e.to_string().contains("UNIQUE constraint failed") {
-                    StorageError::ConstraintViolation {
-                        table: "urls".to_string(),
-                        reason: "duplicate canonical_url".to_string(),
-                    }
-                } else {
-                    StorageError::QueryFailed {
-                        reason: e.to_string(),
-                    }
-                }
+            .map_err(|e| StorageError::QueryFailed {
+                reason: e.to_string(),
             })?;
-        Ok(self.conn.last_insert_rowid())
+        let id: i64 = self
+            .conn
+            .query_row(
+                "SELECT id FROM urls WHERE canonical_url = ?1",
+                [url.canonical()],
+                |row| row.get(0),
+            )
+            .map_err(|e| StorageError::QueryFailed {
+                reason: e.to_string(),
+            })?;
+        Ok(id)
     }
 
     pub fn find_by_id(&self, id: i64) -> Result<Option<UrlRecord>, StorageError> {
@@ -76,24 +78,24 @@ impl<'a> UrlRepository<'a> {
             })
     }
 
-    pub fn list_inbox(&self) -> Result<Vec<UrlRecord>, StorageError> {
-        self.list_where("archived = 0")
+    pub fn list_main(&self) -> Result<Vec<UrlRecord>, StorageError> {
+        self.list_where("archived = 0 AND pinned = 0", "updated_at DESC")
     }
 
     pub fn list_archived(&self) -> Result<Vec<UrlRecord>, StorageError> {
-        self.list_where("archived = 1")
+        self.list_where("archived = 1", "updated_at DESC")
     }
 
-    pub fn list_pinned(&self) -> Result<Vec<UrlRecord>, StorageError> {
-        self.list_where("pinned = 1")
+    pub fn list_favorites(&self) -> Result<Vec<UrlRecord>, StorageError> {
+        self.list_where("archived = 0 AND pinned = 1", "updated_at DESC")
     }
 
-    fn list_where(&self, condition: &str) -> Result<Vec<UrlRecord>, StorageError> {
+    fn list_where(&self, condition: &str, order_by: &str) -> Result<Vec<UrlRecord>, StorageError> {
         let sql = format!(
             "SELECT id, canonical_url, original_url, title, favicon_path,
                     created_at, updated_at, archived, pinned
-             FROM urls WHERE {} ORDER BY created_at DESC",
-            condition
+             FROM urls WHERE {} ORDER BY {}",
+            condition, order_by
         );
         let mut stmt = self
             .conn
@@ -249,14 +251,37 @@ mod tests {
     }
 
     #[test]
-    fn list_inbox_excludes_archived() {
+    fn list_main_excludes_archived_and_pinned() {
         let conn = setup();
         let repo = UrlRepository::new(&conn);
         let url = ValidatedUrl::parse("https://example.com").unwrap();
         let id = repo.insert(&url, None).unwrap();
         repo.set_archived(id, true).unwrap();
-        let inbox = repo.list_inbox().unwrap();
-        assert!(inbox.is_empty());
+        let main = repo.list_main().unwrap();
+        assert!(main.is_empty());
+
+        // pinned should also be excluded from main
+        let url2 = ValidatedUrl::parse("https://rust-lang.org").unwrap();
+        let id2 = repo.insert(&url2, None).unwrap();
+        repo.set_pinned(id2, true).unwrap();
+        let main2 = repo.list_main().unwrap();
+        assert!(main2.is_empty());
+    }
+
+    #[test]
+    fn insert_duplicate_bumps_updated_at() {
+        let conn = setup();
+        let repo = UrlRepository::new(&conn);
+        let url = ValidatedUrl::parse("https://example.com").unwrap();
+        let id1 = repo.insert(&url, Some("First")).unwrap();
+
+        std::thread::sleep(std::time::Duration::from_secs(1));
+
+        let id2 = repo.insert(&url, Some("Second")).unwrap();
+        assert_eq!(id1, id2);
+
+        let record = repo.find_by_id(id1).unwrap().unwrap();
+        assert!(record.updated_at > record.created_at);
     }
 
     #[test]

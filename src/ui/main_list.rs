@@ -2,21 +2,21 @@ use crate::storage::UrlRecord;
 use crate::ui::ViewAction;
 use crate::ui::url_row::url_row;
 
-pub struct InboxState {
+pub struct MainListState {
     pub selected_index: usize,
     pub search_query: String,
     pub search_focused: bool,
 }
 
-impl Default for InboxState {
+impl Default for MainListState {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl InboxState {
+impl MainListState {
     pub fn new() -> Self {
-        InboxState {
+        MainListState {
             selected_index: 0,
             search_query: String::new(),
             search_focused: false,
@@ -59,9 +59,9 @@ impl InboxState {
     }
 }
 
-pub fn inbox_view(
+pub fn main_list_view(
     ui: &mut egui::Ui,
-    state: &mut InboxState,
+    state: &mut MainListState,
     items: &[UrlRecord],
 ) -> Vec<ViewAction> {
     let mut actions = Vec::new();
@@ -104,7 +104,20 @@ pub fn inbox_view(
     }
 
     egui::ScrollArea::vertical().show(ui, |ui| {
+        let mut favorites_heading_shown = false;
+        let mut main_heading_shown = false;
         for (idx, record) in filtered.iter().enumerate() {
+            if record.pinned && !favorites_heading_shown {
+                ui.heading("Favorites");
+                ui.separator();
+                favorites_heading_shown = true;
+            }
+            if !record.pinned && !main_heading_shown {
+                ui.heading("Saved URLs");
+                ui.separator();
+                main_heading_shown = true;
+            }
+
             let selected = idx == state.selected_index;
             let show_actions = selected; // keyboard-selected always shows actions
 
@@ -119,19 +132,19 @@ pub fn inbox_view(
 
 #[cfg(test)]
 mod tests {
-    use super::InboxState;
+    use super::MainListState;
     use crate::storage::UrlRecord;
 
     #[test]
     fn navigate_down_increments_index() {
-        let mut state = InboxState::new();
+        let mut state = MainListState::new();
         state.navigate_down(5);
         assert_eq!(state.selected_index, 1);
     }
 
     #[test]
     fn navigate_up_decrements_index() {
-        let mut state = InboxState::new();
+        let mut state = MainListState::new();
         state.selected_index = 2;
         state.navigate_up(5);
         assert_eq!(state.selected_index, 1);
@@ -139,7 +152,7 @@ mod tests {
 
     #[test]
     fn navigate_down_wraps_to_zero() {
-        let mut state = InboxState::new();
+        let mut state = MainListState::new();
         state.selected_index = 4;
         state.navigate_down(5);
         assert_eq!(state.selected_index, 0);
@@ -147,14 +160,14 @@ mod tests {
 
     #[test]
     fn navigate_up_wraps_to_end() {
-        let mut state = InboxState::new();
+        let mut state = MainListState::new();
         state.navigate_up(5);
         assert_eq!(state.selected_index, 4);
     }
 
     #[test]
     fn navigate_down_with_zero_items() {
-        let mut state = InboxState::new();
+        let mut state = MainListState::new();
         state.navigate_down(0);
         assert_eq!(state.selected_index, 0);
     }
@@ -185,7 +198,7 @@ mod tests {
                 pinned: false,
             },
         ];
-        let mut state = InboxState::new();
+        let mut state = MainListState::new();
         state.search_query = "rust".to_string();
         let filtered = state.filtered_items(&items);
         assert_eq!(filtered.len(), 1);
@@ -218,7 +231,7 @@ mod tests {
                 pinned: false,
             },
         ];
-        let mut state = InboxState::new();
+        let mut state = MainListState::new();
         state.search_query = "rust".to_string();
         let filtered = state.filtered_items(&items);
         assert_eq!(filtered.len(), 1);
@@ -238,7 +251,7 @@ mod tests {
             archived: false,
             pinned: false,
         }];
-        let state = InboxState::new();
+        let state = MainListState::new();
         let filtered = state.filtered_items(&items);
         assert_eq!(filtered.len(), 1);
     }
@@ -269,7 +282,7 @@ mod tests {
                 pinned: false,
             },
         ];
-        let mut state = InboxState::new();
+        let mut state = MainListState::new();
         state.search_query = "RUST".to_string();
         let filtered = state.filtered_items(&items);
         assert_eq!(filtered.len(), 1);
@@ -313,7 +326,7 @@ mod tests {
                 pinned: false,
             },
         ];
-        let mut state = InboxState::new();
+        let mut state = MainListState::new();
         state.search_query = "rust".to_string();
         let filtered = state.filtered_items(&items);
         assert_eq!(filtered.len(), 2);

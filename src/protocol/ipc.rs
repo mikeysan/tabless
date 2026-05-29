@@ -192,7 +192,7 @@ mod tests {
         handle.join().unwrap();
 
         let storage = Storage::open(&db_path).unwrap();
-        let urls = storage.urls().list_inbox().unwrap();
+        let urls = storage.urls().list_main().unwrap();
         assert_eq!(urls.len(), 1);
         assert_eq!(urls[0].canonical_url, "https://example.com/");
     }

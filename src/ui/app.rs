@@ -2,12 +2,14 @@ use eframe::App;
 
 use crate::storage::{Storage, UrlRecord};
 use crate::ui::ViewAction;
-use crate::ui::inbox::{InboxState, inbox_view};
+use crate::ui::main_list::{MainListState, main_list_view};
+use crate::url::ValidatedUrl;
 
 pub struct TablessApp {
     storage: Storage,
-    inbox_state: InboxState,
-    urls: Vec<UrlRecord>,
+    main_list_state: MainListState,
+    favorites: Vec<UrlRecord>,
+    main_list: Vec<UrlRecord>,
     error_message: Option<String>,
     launcher: Option<Box<dyn crate::launcher::UrlLauncher>>,
     ipc_rx: Option<std::sync::mpsc::Receiver<()>>,
@@ -21,8 +23,9 @@ impl TablessApp {
     ) -> Self {
         let mut app = TablessApp {
             storage,
-            inbox_state: InboxState::new(),
-            urls: Vec::new(),
+            main_list_state: MainListState::new(),
+            favorites: Vec::new(),
+            main_list: Vec::new(),
             error_message: None,
             launcher,
             ipc_rx,
@@ -32,14 +35,22 @@ impl TablessApp {
     }
 
     pub fn refresh_urls(&mut self) {
-        match self.storage.urls().list_inbox() {
-            Ok(urls) => {
-                self.urls = urls;
-            }
+        self.error_message = None;
+        match self.storage.urls().list_favorites() {
+            Ok(urls) => self.favorites = urls,
             Err(e) => {
-                log::error!("Failed to load inbox: {}", e);
+                log::error!("Failed to load favorites: {}", e);
                 if self.error_message.is_none() {
-                    self.error_message = Some(format!("Failed to load inbox: {}", e));
+                    self.error_message = Some(format!("Failed to load favorites: {}", e));
+                }
+            }
+        }
+        match self.storage.urls().list_main() {
+            Ok(urls) => self.main_list = urls,
+            Err(e) => {
+                log::error!("Failed to load main list: {}", e);
+                if self.error_message.is_none() {
+                    self.error_message = Some(format!("Failed to load main list: {}", e));
                 }
             }
         }
@@ -57,6 +68,10 @@ impl TablessApp {
                 ViewAction::Pin(id) => {
                     mutated = true;
                     self.storage.urls().set_pinned(id, true)
+                }
+                ViewAction::Unpin(id) => {
+                    mutated = true;
+                    self.storage.urls().set_pinned(id, false)
                 }
                 ViewAction::Delete(id) => {
                     mutated = true;
@@ -103,63 +118,89 @@ impl TablessApp {
 
 impl App for TablessApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Drain IPC notifications and refresh when new URLs arrive
-        if self.drain_ipc() {
+        // Global paste handler: valid URLs anywhere in the focused app should add them
+        let paste_texts: Vec<String> = ctx.input_mut(|i| {
+            let mut texts = Vec::new();
+            i.events.retain(|event| {
+                if let egui::Event::Paste(text) = event {
+                    texts.push(text.clone());
+                    false
+                } else {
+                    true
+                }
+            });
+            texts
+        });
+        let mut pasted_valid = false;
+        for text in paste_texts {
+            if let Ok(url) = ValidatedUrl::parse(&text) {
+                if let Err(e) = self.storage.urls().insert(&url, None) {
+                    log::error!("Paste insert failed: {}", e);
+                } else {
+                    pasted_valid = true;
+                }
+            }
+        }
+        if pasted_valid || self.drain_ipc() {
             self.refresh_urls();
         }
 
-        let actions = {
-            let filtered = self.inbox_state.filtered_items(&self.urls);
+        let all_urls: Vec<UrlRecord> = self
+            .favorites
+            .iter()
+            .cloned()
+            .chain(self.main_list.iter().cloned())
+            .collect();
 
-            if ctx.input(|i| i.key_pressed(egui::Key::ArrowUp)) {
-                self.inbox_state.navigate_up(filtered.len());
-            }
-            if ctx.input(|i| i.key_pressed(egui::Key::ArrowDown)) {
-                self.inbox_state.navigate_down(filtered.len());
-            }
+        let filtered = self.main_list_state.filtered_items(&all_urls);
 
-            let mut actions = Vec::new();
-            if let Some(record) = filtered.get(self.inbox_state.selected_index) {
-                if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
-                    actions.push(ViewAction::Launch(record.id));
-                }
-                if ctx.input(|i| i.key_pressed(egui::Key::A)) {
-                    actions.push(ViewAction::Archive(record.id));
-                }
-                if ctx.input(|i| i.key_pressed(egui::Key::P)) {
+        if ctx.input(|i| i.key_pressed(egui::Key::ArrowUp)) {
+            self.main_list_state.navigate_up(filtered.len());
+        }
+        if ctx.input(|i| i.key_pressed(egui::Key::ArrowDown)) {
+            self.main_list_state.navigate_down(filtered.len());
+        }
+
+        let mut actions = Vec::new();
+        if let Some(record) = filtered.get(self.main_list_state.selected_index) {
+            if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
+                actions.push(ViewAction::Launch(record.id));
+            }
+            if ctx.input(|i| i.key_pressed(egui::Key::A)) {
+                actions.push(ViewAction::Archive(record.id));
+            }
+            if ctx.input(|i| i.key_pressed(egui::Key::P)) {
+                if record.pinned {
+                    actions.push(ViewAction::Unpin(record.id));
+                } else {
                     actions.push(ViewAction::Pin(record.id));
                 }
-                if ctx.input(|i| i.key_pressed(egui::Key::D)) {
-                    actions.push(ViewAction::Delete(record.id));
-                }
             }
-
-            if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-                self.inbox_state.search_query.clear();
-                self.inbox_state.selected_index = 0;
-                self.inbox_state.search_focused = false;
+            if ctx.input(|i| i.key_pressed(egui::Key::D)) {
+                actions.push(ViewAction::Delete(record.id));
             }
+        }
 
-            if ctx.input(|i| i.key_pressed(egui::Key::Slash)) {
-                self.inbox_state.search_focused = true;
-            }
+        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            self.main_list_state.search_query.clear();
+            self.main_list_state.selected_index = 0;
+            self.main_list_state.search_focused = false;
+        }
 
-            actions
-        };
+        if ctx.input(|i| i.key_pressed(egui::Key::Slash)) {
+            self.main_list_state.search_focused = true;
+        }
 
         if !actions.is_empty() {
             self.apply_actions(actions);
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Inbox");
-            ui.separator();
-
             if let Some(ref msg) = self.error_message {
                 ui.colored_label(egui::Color32::RED, msg);
             }
 
-            let view_actions = inbox_view(ui, &mut self.inbox_state, &self.urls);
+            let view_actions = main_list_view(ui, &mut self.main_list_state, &all_urls);
             if !view_actions.is_empty() {
                 self.apply_actions(view_actions);
             }
@@ -323,7 +364,7 @@ mod tests {
 
         let (tx, rx) = std::sync::mpsc::channel();
         let mut app = TablessApp::new(storage, None, Some(rx));
-        assert!(app.urls.is_empty());
+        assert!(app.main_list.is_empty());
 
         // Simulate another process inserting a URL
         let storage2 = Storage::open(&db_path).unwrap();
@@ -338,7 +379,7 @@ mod tests {
             app.refresh_urls();
         }
 
-        assert_eq!(app.urls.len(), 1);
-        assert_eq!(app.urls[0].canonical_url, "https://example.com/");
+        assert_eq!(app.main_list.len(), 1);
+        assert_eq!(app.main_list[0].canonical_url, "https://example.com/");
     }
 }

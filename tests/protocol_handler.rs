@@ -60,7 +60,7 @@ fn end_to_end_single_instance_and_storage() {
 
     // Verify both URLs are in the database
     let storage = Storage::open(&db_path).unwrap();
-    let urls = storage.urls().list_inbox().unwrap();
+    let urls = storage.urls().list_main().unwrap();
     assert_eq!(urls.len(), 2);
 
     let _ = std::fs::remove_dir_all(&tmpdir);

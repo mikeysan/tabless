@@ -1,5 +1,4 @@
 use std::path::Path;
-use tabless::storage::StorageError;
 use tabless::storage::collection_repo::CollectionRepository;
 use tabless::storage::connection::open_connection;
 use tabless::storage::migrations::MigrationRunner;
@@ -76,18 +75,18 @@ fn url_repo_insert_and_find() {
 }
 
 #[test]
-fn url_repo_rejects_duplicate_canonical() {
+fn url_repo_duplicate_bumps_to_top() {
     let conn = setup();
     let repo = UrlRepository::new(&conn);
     let url = ValidatedUrl::parse("https://example.com").unwrap();
 
-    repo.insert(&url, None).unwrap();
-    let result = repo.insert(&url, None);
-    assert!(matches!(
-        result,
-        Err(StorageError::ConstraintViolation { table, .. })
-        if table == "urls"
-    ));
+    let id1 = repo.insert(&url, None).unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(10));
+    let id2 = repo.insert(&url, None).unwrap();
+
+    assert_eq!(id1, id2);
+    let record = repo.find_by_id(id1).unwrap().unwrap();
+    assert!(record.updated_at >= record.created_at);
 }
 
 #[test]
@@ -99,8 +98,8 @@ fn url_repo_archive_and_list() {
     let id = repo.insert(&url, None).unwrap();
     repo.set_archived(id, true).unwrap();
 
-    let inbox = repo.list_inbox().unwrap();
-    assert!(inbox.is_empty());
+    let main = repo.list_main().unwrap();
+    assert!(main.is_empty());
 
     let archived = repo.list_archived().unwrap();
     assert_eq!(archived.len(), 1);
@@ -115,8 +114,8 @@ fn url_repo_pin_and_list() {
     let id = repo.insert(&url, None).unwrap();
     repo.set_pinned(id, true).unwrap();
 
-    let pinned = repo.list_pinned().unwrap();
-    assert_eq!(pinned.len(), 1);
+    let favorites = repo.list_favorites().unwrap();
+    assert_eq!(favorites.len(), 1);
 }
 
 #[test]
