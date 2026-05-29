@@ -77,23 +77,26 @@ pub fn url_row(
                         );
 
                         if show {
-                            if ui.button("D").on_hover_text("Delete").clicked() {
-                                action = Some(ViewAction::Delete(record.id));
-                            }
                             if ui.button("L").on_hover_text("Launch").clicked() {
                                 action = Some(ViewAction::Launch(record.id));
                             }
-                            if record.pinned {
-                                if ui.button("U").on_hover_text("Unfavorite").clicked() {
-                                    action = Some(ViewAction::Unpin(record.id));
+                            if record.archived {
+                                if ui.button("R").on_hover_text("Restore").clicked() {
+                                    action = Some(ViewAction::Restore(record.id));
                                 }
                             } else {
-                                if ui.button("P").on_hover_text("Pin").clicked() {
-                                    action = Some(ViewAction::Pin(record.id));
+                                if record.pinned {
+                                    if ui.button("U").on_hover_text("Unfavorite").clicked() {
+                                        action = Some(ViewAction::Unpin(record.id));
+                                    }
+                                } else {
+                                    if ui.button("P").on_hover_text("Pin").clicked() {
+                                        action = Some(ViewAction::Pin(record.id));
+                                    }
                                 }
-                            }
-                            if ui.button("A").on_hover_text("Archive").clicked() {
-                                action = Some(ViewAction::Archive(record.id));
+                                if ui.button("A").on_hover_text("Archive").clicked() {
+                                    action = Some(ViewAction::Archive(record.id));
+                                }
                             }
                         }
                     });

@@ -10,6 +10,10 @@ pub struct TablessApp {
     main_list_state: MainListState,
     favorites: Vec<UrlRecord>,
     main_list: Vec<UrlRecord>,
+    archived_urls: Vec<UrlRecord>,
+    archive_view: bool,
+    manual_entry: String,
+    manual_entry_error: Option<String>,
     error_message: Option<String>,
     launcher: Option<Box<dyn crate::launcher::UrlLauncher>>,
     ipc_rx: Option<std::sync::mpsc::Receiver<()>>,
@@ -26,6 +30,10 @@ impl TablessApp {
             main_list_state: MainListState::new(),
             favorites: Vec::new(),
             main_list: Vec::new(),
+            archived_urls: Vec::new(),
+            archive_view: false,
+            manual_entry: String::new(),
+            manual_entry_error: None,
             error_message: None,
             launcher,
             ipc_rx,
@@ -54,6 +62,15 @@ impl TablessApp {
                 }
             }
         }
+        match self.storage.urls().list_archived() {
+            Ok(urls) => self.archived_urls = urls,
+            Err(e) => {
+                log::error!("Failed to load archive: {}", e);
+                if self.error_message.is_none() {
+                    self.error_message = Some(format!("Failed to load archive: {}", e));
+                }
+            }
+        }
     }
 
     pub fn apply_actions(&mut self, actions: Vec<ViewAction>) {
@@ -73,9 +90,9 @@ impl TablessApp {
                     mutated = true;
                     self.storage.urls().set_pinned(id, false)
                 }
-                ViewAction::Delete(id) => {
+                ViewAction::Restore(id) => {
                     mutated = true;
-                    self.storage.urls().delete(id)
+                    self.storage.urls().set_archived(id, false)
                 }
                 ViewAction::Launch(id) => match self.storage.urls().find_by_id(id) {
                     Ok(Some(record)) => {
@@ -145,12 +162,15 @@ impl App for TablessApp {
             self.refresh_urls();
         }
 
-        let all_urls: Vec<UrlRecord> = self
-            .favorites
-            .iter()
-            .cloned()
-            .chain(self.main_list.iter().cloned())
-            .collect();
+        let all_urls: Vec<UrlRecord> = if self.archive_view {
+            self.archived_urls.clone()
+        } else {
+            self.favorites
+                .iter()
+                .cloned()
+                .chain(self.main_list.iter().cloned())
+                .collect()
+        };
 
         let filtered = self.main_list_state.filtered_items(&all_urls);
 
@@ -166,19 +186,28 @@ impl App for TablessApp {
             if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
                 actions.push(ViewAction::Launch(record.id));
             }
-            if ctx.input(|i| i.key_pressed(egui::Key::A)) {
-                actions.push(ViewAction::Archive(record.id));
-            }
-            if ctx.input(|i| i.key_pressed(egui::Key::P)) {
-                if record.pinned {
-                    actions.push(ViewAction::Unpin(record.id));
-                } else {
-                    actions.push(ViewAction::Pin(record.id));
+            if self.archive_view {
+                if ctx.input(|i| i.key_pressed(egui::Key::R)) {
+                    actions.push(ViewAction::Restore(record.id));
+                }
+            } else {
+                if ctx.input(|i| i.key_pressed(egui::Key::A)) {
+                    actions.push(ViewAction::Archive(record.id));
+                }
+                if ctx.input(|i| i.key_pressed(egui::Key::P)) {
+                    if record.pinned {
+                        actions.push(ViewAction::Unpin(record.id));
+                    } else {
+                        actions.push(ViewAction::Pin(record.id));
+                    }
                 }
             }
-            if ctx.input(|i| i.key_pressed(egui::Key::D)) {
-                actions.push(ViewAction::Delete(record.id));
-            }
+        }
+
+        if ctx.input(|i| i.key_pressed(egui::Key::Tab)) {
+            self.archive_view = !self.archive_view;
+            self.main_list_state.selected_index = 0;
+            self.main_list_state.search_query.clear();
         }
 
         if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
@@ -196,11 +225,35 @@ impl App for TablessApp {
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {
+            if !self.archive_view {
+                ui.horizontal(|ui| {
+                    ui.label("Add URL:");
+                    let response = ui.text_edit_singleline(&mut self.manual_entry);
+                    if ui.input(|i| i.key_pressed(egui::Key::Enter)) && response.has_focus() {
+                        self.manual_entry_error = None;
+                        if let Ok(url) = ValidatedUrl::parse(&self.manual_entry) {
+                            if let Err(e) = self.storage.urls().insert(&url, None) {
+                                self.manual_entry_error = Some(format!("Insert failed: {}", e));
+                            } else {
+                                self.manual_entry.clear();
+                                self.refresh_urls();
+                            }
+                        } else {
+                            self.manual_entry_error = Some("Invalid URL".to_string());
+                        }
+                    }
+                });
+                if let Some(ref err) = self.manual_entry_error {
+                    ui.colored_label(egui::Color32::RED, err);
+                }
+            }
+
             if let Some(ref msg) = self.error_message {
                 ui.colored_label(egui::Color32::RED, msg);
             }
 
-            let view_actions = main_list_view(ui, &mut self.main_list_state, &all_urls);
+            let view_actions =
+                main_list_view(ui, &mut self.main_list_state, &all_urls, self.archive_view);
             if !view_actions.is_empty() {
                 self.apply_actions(view_actions);
             }
@@ -256,17 +309,18 @@ mod tests {
     }
 
     #[test]
-    fn delete_action_removes_from_storage() {
+    fn restore_action_updates_storage() {
         let db_path = temp_db_path();
         let storage = Storage::open(&db_path).unwrap();
         let url = ValidatedUrl::parse("https://example.com").unwrap();
         let id = storage.urls().insert(&url, Some("Example Site")).unwrap();
+        storage.urls().set_archived(id, true).unwrap();
 
         let mut app = TablessApp::new(storage, None, None);
-        app.apply_actions(vec![ViewAction::Delete(id)]);
+        app.apply_actions(vec![ViewAction::Restore(id)]);
 
-        let record = app.storage.urls().find_by_id(id).unwrap();
-        assert!(record.is_none());
+        let record = app.storage.urls().find_by_id(id).unwrap().unwrap();
+        assert!(!record.archived);
     }
 
     #[test]

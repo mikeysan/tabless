@@ -63,6 +63,7 @@ pub fn main_list_view(
     ui: &mut egui::Ui,
     state: &mut MainListState,
     items: &[UrlRecord],
+    is_archive_view: bool,
 ) -> Vec<ViewAction> {
     let mut actions = Vec::new();
 
@@ -90,7 +91,11 @@ pub fn main_list_view(
     if filtered.is_empty() {
         ui.centered_and_justified(|ui| {
             if items.is_empty() {
-                ui.label("No URLs captured yet. Open a link to get started.");
+                if is_archive_view {
+                    ui.label("No archived URLs.");
+                } else {
+                    ui.label("No URLs captured yet. Open a link to get started.");
+                }
             } else {
                 ui.label("No URLs match your search.");
             }
@@ -104,25 +109,37 @@ pub fn main_list_view(
     }
 
     egui::ScrollArea::vertical().show(ui, |ui| {
-        let mut favorites_heading_shown = false;
-        let mut main_heading_shown = false;
-        for (idx, record) in filtered.iter().enumerate() {
-            if record.pinned && !favorites_heading_shown {
-                ui.heading("Favorites");
-                ui.separator();
-                favorites_heading_shown = true;
+        if is_archive_view {
+            ui.heading("Archived URLs");
+            ui.separator();
+            for (idx, record) in filtered.iter().enumerate() {
+                let selected = idx == state.selected_index;
+                let show_actions = selected;
+                if let Some(action) = url_row(ui, record, selected, show_actions) {
+                    actions.push(action);
+                }
             }
-            if !record.pinned && !main_heading_shown {
-                ui.heading("Saved URLs");
-                ui.separator();
-                main_heading_shown = true;
-            }
+        } else {
+            let mut favorites_heading_shown = false;
+            let mut main_heading_shown = false;
+            for (idx, record) in filtered.iter().enumerate() {
+                if record.pinned && !favorites_heading_shown {
+                    ui.heading("Favorites");
+                    ui.separator();
+                    favorites_heading_shown = true;
+                }
+                if !record.pinned && !main_heading_shown {
+                    ui.heading("Saved URLs");
+                    ui.separator();
+                    main_heading_shown = true;
+                }
 
-            let selected = idx == state.selected_index;
-            let show_actions = selected; // keyboard-selected always shows actions
+                let selected = idx == state.selected_index;
+                let show_actions = selected; // keyboard-selected always shows actions
 
-            if let Some(action) = url_row(ui, record, selected, show_actions) {
-                actions.push(action);
+                if let Some(action) = url_row(ui, record, selected, show_actions) {
+                    actions.push(action);
+                }
             }
         }
     });
