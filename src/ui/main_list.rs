@@ -115,29 +115,71 @@ pub fn main_list_view(
             for (idx, record) in filtered.iter().enumerate() {
                 let selected = idx == state.selected_index;
                 let show_actions = selected;
-                if let Some(action) = url_row(ui, record, selected, show_actions) {
+                let (row_action, response) = url_row(ui, record, selected, show_actions);
+                response.context_menu(|ui| {
+                    if ui.button("Launch").clicked() {
+                        actions.push(ViewAction::Launch(record.id));
+                        ui.close_menu();
+                    }
+                    if ui.button("Copy URL").clicked() {
+                        actions.push(ViewAction::Copy(record.id));
+                        ui.close_menu();
+                    }
+                    if ui.button("Restore").clicked() {
+                        actions.push(ViewAction::Restore(record.id));
+                        ui.close_menu();
+                    }
+                });
+                if let Some(action) = row_action {
                     actions.push(action);
                 }
             }
         } else {
             let mut favorites_heading_shown = false;
             let mut main_heading_shown = false;
+            let _favorite_count = filtered.iter().filter(|r| r.favorite).count();
             for (idx, record) in filtered.iter().enumerate() {
-                if record.pinned && !favorites_heading_shown {
+                if record.favorite && !favorites_heading_shown {
                     ui.heading("Favorites");
                     ui.separator();
                     favorites_heading_shown = true;
                 }
-                if !record.pinned && !main_heading_shown {
+                if !record.favorite && !main_heading_shown {
                     ui.heading("Saved URLs");
                     ui.separator();
                     main_heading_shown = true;
                 }
 
                 let selected = idx == state.selected_index;
-                let show_actions = selected; // keyboard-selected always shows actions
-
-                if let Some(action) = url_row(ui, record, selected, show_actions) {
+                let show_actions = selected;
+                let is_favorite = record.favorite;
+                let (row_action, response) = url_row(ui, record, selected, show_actions);
+                response.context_menu(|ui| {
+                    if ui.button("Launch").clicked() {
+                        actions.push(ViewAction::Launch(record.id));
+                        ui.close_menu();
+                    }
+                    if ui.button("Copy URL").clicked() {
+                        actions.push(ViewAction::Copy(record.id));
+                        ui.close_menu();
+                    }
+                    if is_favorite {
+                        if ui.button("Unfavorite").clicked() {
+                            actions.push(ViewAction::Unfavorite(record.id));
+                            ui.close_menu();
+                        }
+                    } else {
+                        if ui.button("Favorite").clicked() {
+                            actions.push(ViewAction::Favorite(record.id));
+                            ui.close_menu();
+                        }
+                    }
+                    if ui.button("Archive").clicked() {
+                        actions.push(ViewAction::Archive(record.id));
+                        ui.close_menu();
+                    }
+                });
+                if let Some(action) = row_action {
                     actions.push(action);
                 }
             }
@@ -201,7 +243,8 @@ mod tests {
                 created_at: 0,
                 updated_at: 0,
                 archived: false,
-                pinned: false,
+                favorite: false,
+                favorite_order: 0,
             },
             UrlRecord {
                 id: 2,
@@ -212,7 +255,8 @@ mod tests {
                 created_at: 0,
                 updated_at: 0,
                 archived: false,
-                pinned: false,
+                favorite: false,
+                favorite_order: 0,
             },
         ];
         let mut state = MainListState::new();
@@ -234,7 +278,8 @@ mod tests {
                 created_at: 0,
                 updated_at: 0,
                 archived: false,
-                pinned: false,
+                favorite: false,
+                favorite_order: 0,
             },
             UrlRecord {
                 id: 2,
@@ -245,7 +290,8 @@ mod tests {
                 created_at: 0,
                 updated_at: 0,
                 archived: false,
-                pinned: false,
+                favorite: false,
+                favorite_order: 0,
             },
         ];
         let mut state = MainListState::new();
@@ -266,7 +312,8 @@ mod tests {
             created_at: 0,
             updated_at: 0,
             archived: false,
-            pinned: false,
+            favorite: false,
+            favorite_order: 0,
         }];
         let state = MainListState::new();
         let filtered = state.filtered_items(&items);
@@ -285,7 +332,8 @@ mod tests {
                 created_at: 0,
                 updated_at: 0,
                 archived: false,
-                pinned: false,
+                favorite: false,
+                favorite_order: 0,
             },
             UrlRecord {
                 id: 2,
@@ -296,7 +344,8 @@ mod tests {
                 created_at: 0,
                 updated_at: 0,
                 archived: false,
-                pinned: false,
+                favorite: false,
+                favorite_order: 0,
             },
         ];
         let mut state = MainListState::new();
@@ -318,7 +367,8 @@ mod tests {
                 created_at: 0,
                 updated_at: 0,
                 archived: false,
-                pinned: false,
+                favorite: false,
+                favorite_order: 0,
             },
             UrlRecord {
                 id: 2,
@@ -329,7 +379,8 @@ mod tests {
                 created_at: 0,
                 updated_at: 0,
                 archived: false,
-                pinned: false,
+                favorite: false,
+                favorite_order: 0,
             },
             UrlRecord {
                 id: 3,
@@ -340,7 +391,8 @@ mod tests {
                 created_at: 0,
                 updated_at: 0,
                 archived: false,
-                pinned: false,
+                favorite: false,
+                favorite_order: 0,
             },
         ];
         let mut state = MainListState::new();

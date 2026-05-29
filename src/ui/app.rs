@@ -1,5 +1,6 @@
 use eframe::App;
 
+use crate::launcher::BrowserIdentity;
 use crate::storage::{Storage, UrlRecord};
 use crate::ui::ViewAction;
 use crate::ui::main_list::{MainListState, main_list_view};
@@ -16,6 +17,9 @@ pub struct TablessApp {
     manual_entry_error: Option<String>,
     error_message: Option<String>,
     launcher: Option<Box<dyn crate::launcher::UrlLauncher>>,
+    browser_identities: Vec<BrowserIdentity>,
+    show_browser_picker: bool,
+    browser_picker_id: Option<i64>,
     ipc_rx: Option<std::sync::mpsc::Receiver<()>>,
 }
 
@@ -23,6 +27,7 @@ impl TablessApp {
     pub fn new(
         storage: Storage,
         launcher: Option<Box<dyn crate::launcher::UrlLauncher>>,
+        browser_identities: Vec<BrowserIdentity>,
         ipc_rx: Option<std::sync::mpsc::Receiver<()>>,
     ) -> Self {
         let mut app = TablessApp {
@@ -36,6 +41,9 @@ impl TablessApp {
             manual_entry_error: None,
             error_message: None,
             launcher,
+            browser_identities,
+            show_browser_picker: false,
+            browser_picker_id: None,
             ipc_rx,
         };
         app.refresh_urls();
@@ -82,17 +90,17 @@ impl TablessApp {
                     mutated = true;
                     self.storage.urls().set_archived(id, true)
                 }
-                ViewAction::Pin(id) => {
-                    mutated = true;
-                    self.storage.urls().set_pinned(id, true)
-                }
-                ViewAction::Unpin(id) => {
-                    mutated = true;
-                    self.storage.urls().set_pinned(id, false)
-                }
                 ViewAction::Restore(id) => {
                     mutated = true;
                     self.storage.urls().set_archived(id, false)
+                }
+                ViewAction::Favorite(id) => {
+                    mutated = true;
+                    self.storage.urls().set_favorite(id, true)
+                }
+                ViewAction::Unfavorite(id) => {
+                    mutated = true;
+                    self.storage.urls().set_favorite(id, false)
                 }
                 ViewAction::Launch(id) => match self.storage.urls().find_by_id(id) {
                     Ok(Some(record)) => {
@@ -111,6 +119,68 @@ impl TablessApp {
                     }
                     Err(e) => Err(e),
                 },
+                ViewAction::Copy(id) => match self.storage.urls().find_by_id(id) {
+                    Ok(Some(record)) => {
+                        if let Ok(mut clipboard) = arboard::Clipboard::new()
+                            && let Err(e) = clipboard.set_text(&record.canonical_url)
+                        {
+                            self.error_message = Some(format!("Copy failed: {}", e));
+                        }
+                        Ok(())
+                    }
+                    Ok(None) => {
+                        log::warn!("URL not found for copy: id={}", id);
+                        Ok(())
+                    }
+                    Err(e) => Err(e),
+                },
+                ViewAction::MoveFavoriteUp(id) => {
+                    mutated = true;
+                    if let Some(pos) = self.favorites.iter().position(|r| r.id == id) {
+                        if pos > 0 {
+                            let prev_id = self.favorites[pos - 1].id;
+                            self.storage.urls().swap_favorite_order(id, prev_id)
+                        } else {
+                            Ok(())
+                        }
+                    } else {
+                        Ok(())
+                    }
+                }
+                ViewAction::MoveFavoriteDown(id) => {
+                    mutated = true;
+                    if let Some(pos) = self.favorites.iter().position(|r| r.id == id) {
+                        if pos + 1 < self.favorites.len() {
+                            let next_id = self.favorites[pos + 1].id;
+                            self.storage.urls().swap_favorite_order(id, next_id)
+                        } else {
+                            Ok(())
+                        }
+                    } else {
+                        Ok(())
+                    }
+                }
+                ViewAction::LaunchWithBrowser { id, identity } => {
+                    match self.storage.urls().find_by_id(id) {
+                        Ok(Some(record)) => {
+                            if let Some(ref launcher) = self.launcher {
+                                if let Err(e) =
+                                    launcher.launch_with_identity(&record.canonical_url, identity)
+                                {
+                                    self.error_message = Some(format!("Launch failed: {}", e));
+                                }
+                            } else {
+                                self.error_message = Some("No browser configured".to_string());
+                            }
+                            Ok(())
+                        }
+                        Ok(None) => {
+                            log::warn!("URL not found for launch: id={}", id);
+                            Ok(())
+                        }
+                        Err(e) => Err(e),
+                    }
+                }
             };
             if let Err(e) = result {
                 log::error!("Action failed: {}", e);
@@ -186,6 +256,9 @@ impl App for TablessApp {
             if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
                 actions.push(ViewAction::Launch(record.id));
             }
+            if ctx.input(|i| i.key_pressed(egui::Key::C)) {
+                actions.push(ViewAction::Copy(record.id));
+            }
             if self.archive_view {
                 if ctx.input(|i| i.key_pressed(egui::Key::R)) {
                     actions.push(ViewAction::Restore(record.id));
@@ -194,13 +267,25 @@ impl App for TablessApp {
                 if ctx.input(|i| i.key_pressed(egui::Key::A)) {
                     actions.push(ViewAction::Archive(record.id));
                 }
-                if ctx.input(|i| i.key_pressed(egui::Key::P)) {
-                    if record.pinned {
-                        actions.push(ViewAction::Unpin(record.id));
+                if ctx.input(|i| i.key_pressed(egui::Key::F)) {
+                    if record.favorite {
+                        actions.push(ViewAction::Unfavorite(record.id));
                     } else {
-                        actions.push(ViewAction::Pin(record.id));
+                        actions.push(ViewAction::Favorite(record.id));
                     }
                 }
+                if record.favorite {
+                    if ctx.input(|i| i.key_pressed(egui::Key::ArrowUp) && i.modifiers.shift) {
+                        actions.push(ViewAction::MoveFavoriteUp(record.id));
+                    }
+                    if ctx.input(|i| i.key_pressed(egui::Key::ArrowDown) && i.modifiers.shift) {
+                        actions.push(ViewAction::MoveFavoriteDown(record.id));
+                    }
+                }
+            }
+            if ctx.input(|i| i.key_pressed(egui::Key::Enter) && i.modifiers.shift) {
+                self.show_browser_picker = true;
+                self.browser_picker_id = Some(record.id);
             }
         }
 
@@ -214,6 +299,8 @@ impl App for TablessApp {
             self.main_list_state.search_query.clear();
             self.main_list_state.selected_index = 0;
             self.main_list_state.search_focused = false;
+            self.show_browser_picker = false;
+            self.browser_picker_id = None;
         }
 
         if ctx.input(|i| i.key_pressed(egui::Key::Slash)) {
@@ -258,6 +345,38 @@ impl App for TablessApp {
                 self.apply_actions(view_actions);
             }
         });
+
+        // Browser picker modal
+        let mut chosen_identity: Option<BrowserIdentity> = None;
+        let mut close_picker = false;
+        if self.show_browser_picker {
+            egui::Window::new("Open in Alternate Browser")
+                .collapsible(false)
+                .resizable(false)
+                .show(ctx, |ui| {
+                    if self.browser_identities.is_empty() {
+                        ui.label("No alternate browsers discovered.");
+                    } else {
+                        for identity in &self.browser_identities {
+                            let label = format!("{:?}", identity);
+                            if ui.button(&label).clicked() {
+                                chosen_identity = Some(identity.clone());
+                                close_picker = true;
+                            }
+                        }
+                    }
+                    if ui.button("Cancel").clicked() {
+                        close_picker = true;
+                    }
+                });
+        }
+        if close_picker {
+            if let (Some(id), Some(identity)) = (self.browser_picker_id, chosen_identity) {
+                self.apply_actions(vec![ViewAction::LaunchWithBrowser { id, identity }]);
+            }
+            self.show_browser_picker = false;
+            self.browser_picker_id = None;
+        }
     }
 }
 
@@ -266,6 +385,7 @@ mod tests {
     use std::path::PathBuf;
 
     use super::TablessApp;
+    use crate::launcher::BrowserIdentity;
     use crate::storage::Storage;
     use crate::ui::ViewAction;
     use crate::url::ValidatedUrl;
@@ -287,7 +407,7 @@ mod tests {
         let url = ValidatedUrl::parse("https://example.com").unwrap();
         let id = storage.urls().insert(&url, Some("Example Site")).unwrap();
 
-        let mut app = TablessApp::new(storage, None, None);
+        let mut app = TablessApp::new(storage, None, Vec::new(), None);
         app.apply_actions(vec![ViewAction::Archive(id)]);
 
         let record = app.storage.urls().find_by_id(id).unwrap().unwrap();
@@ -295,17 +415,17 @@ mod tests {
     }
 
     #[test]
-    fn pin_action_updates_storage() {
+    fn favorite_action_updates_storage() {
         let db_path = temp_db_path();
         let storage = Storage::open(&db_path).unwrap();
         let url = ValidatedUrl::parse("https://example.com").unwrap();
         let id = storage.urls().insert(&url, Some("Example Site")).unwrap();
 
-        let mut app = TablessApp::new(storage, None, None);
-        app.apply_actions(vec![ViewAction::Pin(id)]);
+        let mut app = TablessApp::new(storage, None, Vec::new(), None);
+        app.apply_actions(vec![ViewAction::Favorite(id)]);
 
         let record = app.storage.urls().find_by_id(id).unwrap().unwrap();
-        assert!(record.pinned);
+        assert!(record.favorite);
     }
 
     #[test]
@@ -316,7 +436,7 @@ mod tests {
         let id = storage.urls().insert(&url, Some("Example Site")).unwrap();
         storage.urls().set_archived(id, true).unwrap();
 
-        let mut app = TablessApp::new(storage, None, None);
+        let mut app = TablessApp::new(storage, None, Vec::new(), None);
         app.apply_actions(vec![ViewAction::Restore(id)]);
 
         let record = app.storage.urls().find_by_id(id).unwrap().unwrap();
@@ -336,6 +456,13 @@ mod tests {
                 self.launched.lock().unwrap().push(url.to_string());
                 Ok(())
             }
+            fn launch_with_identity(
+                &self,
+                _url: &str,
+                _identity: BrowserIdentity,
+            ) -> Result<(), crate::launcher::LaunchError> {
+                Ok(())
+            }
         }
 
         let db_path = temp_db_path();
@@ -348,7 +475,7 @@ mod tests {
             launched: launched.clone(),
         };
 
-        let mut app = TablessApp::new(storage, Some(Box::new(launcher)), None);
+        let mut app = TablessApp::new(storage, Some(Box::new(launcher)), Vec::new(), None);
         app.apply_actions(vec![ViewAction::Launch(id)]);
 
         let urls = launched.lock().unwrap();
@@ -363,7 +490,7 @@ mod tests {
         let url = ValidatedUrl::parse("https://example.com").unwrap();
         let id = storage.urls().insert(&url, Some("Example")).unwrap();
 
-        let mut app = TablessApp::new(storage, None, None);
+        let mut app = TablessApp::new(storage, None, Vec::new(), None);
         app.apply_actions(vec![ViewAction::Launch(id)]);
 
         assert_eq!(app.error_message, Some("No browser configured".to_string()));
@@ -378,7 +505,16 @@ mod tests {
         impl crate::launcher::UrlLauncher for FailingLauncher {
             fn launch(&self, _url: &str) -> Result<(), LaunchError> {
                 Err(LaunchError::BrowserNotFound {
-                    identity: crate::launcher::BrowserIdentity::Firefox,
+                    identity: BrowserIdentity::Firefox,
+                })
+            }
+            fn launch_with_identity(
+                &self,
+                _url: &str,
+                _identity: BrowserIdentity,
+            ) -> Result<(), LaunchError> {
+                Err(LaunchError::BrowserNotFound {
+                    identity: BrowserIdentity::Firefox,
                 })
             }
         }
@@ -388,7 +524,7 @@ mod tests {
         let url = ValidatedUrl::parse("https://example.com").unwrap();
         let id = storage.urls().insert(&url, Some("Example")).unwrap();
 
-        let mut app = TablessApp::new(storage, Some(Box::new(FailingLauncher)), None);
+        let mut app = TablessApp::new(storage, Some(Box::new(FailingLauncher)), Vec::new(), None);
         app.apply_actions(vec![ViewAction::Launch(id)]);
 
         assert!(
@@ -404,7 +540,7 @@ mod tests {
         let db_path = temp_db_path();
         let storage = Storage::open(&db_path).unwrap();
 
-        let mut app = TablessApp::new(storage, None, None);
+        let mut app = TablessApp::new(storage, None, Vec::new(), None);
         app.apply_actions(vec![ViewAction::Launch(9999)]);
 
         // Should not panic and should not set an error message
@@ -417,7 +553,7 @@ mod tests {
         let storage = Storage::open(&db_path).unwrap();
 
         let (tx, rx) = std::sync::mpsc::channel();
-        let mut app = TablessApp::new(storage, None, Some(rx));
+        let mut app = TablessApp::new(storage, None, Vec::new(), Some(rx));
         assert!(app.main_list.is_empty());
 
         // Simulate another process inserting a URL

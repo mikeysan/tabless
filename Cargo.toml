@@ -19,5 +19,6 @@ eframe = { version = "0.31", default-features = false, features = ["glow", "defa
 winit = { version = "0.30", default-features = false, features = ["wayland-dlopen", "wayland-csd-adwaita"] }
 log = "0.4"
 env_logger = "0.11"
+arboard = "3"
 
 [dev-dependencies]

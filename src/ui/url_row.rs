@@ -29,7 +29,7 @@ pub fn url_row(
     record: &UrlRecord,
     selected: bool,
     show_actions: bool,
-) -> Option<ViewAction> {
+) -> (Option<ViewAction>, egui::Response) {
     let mut action = None;
 
     let bg = if selected {
@@ -80,18 +80,21 @@ pub fn url_row(
                             if ui.button("L").on_hover_text("Launch").clicked() {
                                 action = Some(ViewAction::Launch(record.id));
                             }
+                            if ui.button("C").on_hover_text("Copy URL").clicked() {
+                                action = Some(ViewAction::Copy(record.id));
+                            }
                             if record.archived {
                                 if ui.button("R").on_hover_text("Restore").clicked() {
                                     action = Some(ViewAction::Restore(record.id));
                                 }
                             } else {
-                                if record.pinned {
+                                if record.favorite {
                                     if ui.button("U").on_hover_text("Unfavorite").clicked() {
-                                        action = Some(ViewAction::Unpin(record.id));
+                                        action = Some(ViewAction::Unfavorite(record.id));
                                     }
                                 } else {
-                                    if ui.button("P").on_hover_text("Pin").clicked() {
-                                        action = Some(ViewAction::Pin(record.id));
+                                    if ui.button("F").on_hover_text("Favorite").clicked() {
+                                        action = Some(ViewAction::Favorite(record.id));
                                     }
                                 }
                                 if ui.button("A").on_hover_text("Archive").clicked() {
@@ -112,7 +115,7 @@ pub fn url_row(
         action = Some(ViewAction::Launch(record.id));
     }
 
-    action
+    (action, response.response)
 }
 
 #[cfg(test)]

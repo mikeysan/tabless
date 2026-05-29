@@ -31,12 +31,10 @@ fn migration_runner_applies_schema() {
     assert_eq!(count, 1);
 
     // Verify _migrations tracking
-    let version: i64 = conn
-        .query_row("SELECT version FROM _migrations LIMIT 1", [], |row| {
-            row.get(0)
-        })
+    let count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM _migrations", [], |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 1);
+    assert_eq!(count, 1);
 }
 
 #[test]
@@ -106,13 +104,13 @@ fn url_repo_archive_and_list() {
 }
 
 #[test]
-fn url_repo_pin_and_list() {
+fn url_repo_favorite_and_list() {
     let conn = setup();
     let repo = UrlRepository::new(&conn);
     let url = ValidatedUrl::parse("https://example.com").unwrap();
 
     let id = repo.insert(&url, None).unwrap();
-    repo.set_pinned(id, true).unwrap();
+    repo.set_favorite(id, true).unwrap();
 
     let favorites = repo.list_favorites().unwrap();
     assert_eq!(favorites.len(), 1);

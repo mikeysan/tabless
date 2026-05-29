@@ -33,11 +33,27 @@ pub use windows::WindowsBrowser as DefaultPlatform;
 
 pub trait UrlLauncher: Send + Sync {
     fn launch(&self, url: &str) -> Result<(), LaunchError>;
+    fn launch_with_identity(&self, url: &str, identity: BrowserIdentity)
+    -> Result<(), LaunchError>;
 }
 
 impl<P: PlatformBrowser> UrlLauncher for Launcher<P> {
     fn launch(&self, url: &str) -> Result<(), LaunchError> {
         let mut child = self.launch(url)?;
+        std::thread::spawn(move || {
+            if let Err(e) = child.wait() {
+                log::warn!("Browser process wait failed: {}", e);
+            }
+        });
+        Ok(())
+    }
+
+    fn launch_with_identity(
+        &self,
+        url: &str,
+        identity: BrowserIdentity,
+    ) -> Result<(), LaunchError> {
+        let mut child = self.launch_with_identity(&identity, url)?;
         std::thread::spawn(move || {
             if let Err(e) = child.wait() {
                 log::warn!("Browser process wait failed: {}", e);

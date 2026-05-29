@@ -20,9 +20,19 @@ impl Drop for SocketGuard<'_> {
     }
 }
 
-fn build_launcher() -> Option<Box<dyn UrlLauncher>> {
+fn build_launcher() -> (
+    Option<Box<dyn UrlLauncher>>,
+    Vec<tabless::launcher::BrowserIdentity>,
+) {
     let platform = DefaultPlatform::new();
-    let discovered = platform.discover_browsers().ok()?;
+    let discovered = match platform.discover_browsers() {
+        Ok(d) => d,
+        Err(_) => return (None, Vec::new()),
+    };
+    let identities: Vec<tabless::launcher::BrowserIdentity> = discovered
+        .iter()
+        .map(|info| info.identity.clone())
+        .collect();
     let mut launcher = Launcher::new(platform, discovered);
     // Collect defaults first to avoid borrowing launcher mutably while iterating registry.
     let defaults: Vec<_> = launcher
@@ -35,7 +45,7 @@ fn build_launcher() -> Option<Box<dyn UrlLauncher>> {
     for identity in defaults {
         let _ = launcher.registry_mut().set_preferred(identity);
     }
-    Some(Box::new(launcher))
+    (Some(Box::new(launcher)), identities)
 }
 
 fn spawn_ipc_server(
@@ -107,8 +117,8 @@ fn shutdown_ipc(
 }
 
 fn run_gui(storage: tabless::storage::Storage, ipc_rx: Option<std::sync::mpsc::Receiver<()>>) {
-    let launcher = build_launcher();
-    let app = tabless::ui::app::TablessApp::new(storage, launcher, ipc_rx);
+    let (launcher, browser_identities) = build_launcher();
+    let app = tabless::ui::app::TablessApp::new(storage, launcher, browser_identities, ipc_rx);
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([800.0, 600.0]),
         ..Default::default()

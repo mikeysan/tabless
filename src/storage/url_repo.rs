@@ -14,7 +14,8 @@ pub struct UrlRecord {
     pub created_at: i64,
     pub updated_at: i64,
     pub archived: bool,
-    pub pinned: bool,
+    pub favorite: bool,
+    pub favorite_order: i64,
 }
 
 pub struct UrlRepository<'a> {
@@ -55,7 +56,7 @@ impl<'a> UrlRepository<'a> {
         self.conn
             .query_row(
                 "SELECT id, canonical_url, original_url, title, favicon_path,
-                        created_at, updated_at, archived, pinned
+                        created_at, updated_at, archived, favorite, favorite_order
                  FROM urls WHERE id = ?1",
                 [id],
                 |row| {
@@ -68,7 +69,8 @@ impl<'a> UrlRepository<'a> {
                         created_at: row.get(5)?,
                         updated_at: row.get(6)?,
                         archived: row.get::<_, i64>(7)? != 0,
-                        pinned: row.get::<_, i64>(8)? != 0,
+                        favorite: row.get::<_, i64>(8)? != 0,
+                        favorite_order: row.get(9)?,
                     })
                 },
             )
@@ -79,7 +81,7 @@ impl<'a> UrlRepository<'a> {
     }
 
     pub fn list_main(&self) -> Result<Vec<UrlRecord>, StorageError> {
-        self.list_where("archived = 0 AND pinned = 0", "updated_at DESC")
+        self.list_where("archived = 0 AND favorite = 0", "updated_at DESC")
     }
 
     pub fn list_archived(&self) -> Result<Vec<UrlRecord>, StorageError> {
@@ -87,13 +89,16 @@ impl<'a> UrlRepository<'a> {
     }
 
     pub fn list_favorites(&self) -> Result<Vec<UrlRecord>, StorageError> {
-        self.list_where("archived = 0 AND pinned = 1", "updated_at DESC")
+        self.list_where(
+            "archived = 0 AND favorite = 1",
+            "favorite_order ASC, updated_at DESC",
+        )
     }
 
     fn list_where(&self, condition: &str, order_by: &str) -> Result<Vec<UrlRecord>, StorageError> {
         let sql = format!(
             "SELECT id, canonical_url, original_url, title, favicon_path,
-                    created_at, updated_at, archived, pinned
+                    created_at, updated_at, archived, favorite, favorite_order
              FROM urls WHERE {} ORDER BY {}",
             condition, order_by
         );
@@ -114,7 +119,8 @@ impl<'a> UrlRepository<'a> {
                     created_at: row.get(5)?,
                     updated_at: row.get(6)?,
                     archived: row.get::<_, i64>(7)? != 0,
-                    pinned: row.get::<_, i64>(8)? != 0,
+                    favorite: row.get::<_, i64>(8)? != 0,
+                    favorite_order: row.get(9)?,
                 })
             })
             .map_err(|e| StorageError::QueryFailed {
@@ -138,11 +144,64 @@ impl<'a> UrlRepository<'a> {
         Ok(())
     }
 
-    pub fn set_pinned(&self, id: i64, pinned: bool) -> Result<(), StorageError> {
+    pub fn set_favorite(&self, id: i64, favorite: bool) -> Result<(), StorageError> {
+        let order = if favorite {
+            let max: i64 = self
+                .conn
+                .query_row(
+                    "SELECT COALESCE(MAX(favorite_order), 0) FROM urls WHERE favorite = 1",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
+            max + 1
+        } else {
+            0
+        };
         self.conn
             .execute(
-                "UPDATE urls SET pinned = ?1, updated_at = ?2 WHERE id = ?3",
-                params![pinned as i64, Self::now(), id],
+                "UPDATE urls SET favorite = ?1, favorite_order = ?2, updated_at = ?3 WHERE id = ?4",
+                params![favorite as i64, order, Self::now(), id],
+            )
+            .map_err(|e| StorageError::QueryFailed {
+                reason: e.to_string(),
+            })?;
+        Ok(())
+    }
+
+    pub fn swap_favorite_order(&self, id_a: i64, id_b: i64) -> Result<(), StorageError> {
+        let order_a: i64 = self
+            .conn
+            .query_row(
+                "SELECT favorite_order FROM urls WHERE id = ?1",
+                [id_a],
+                |row| row.get(0),
+            )
+            .map_err(|e| StorageError::QueryFailed {
+                reason: e.to_string(),
+            })?;
+        let order_b: i64 = self
+            .conn
+            .query_row(
+                "SELECT favorite_order FROM urls WHERE id = ?1",
+                [id_b],
+                |row| row.get(0),
+            )
+            .map_err(|e| StorageError::QueryFailed {
+                reason: e.to_string(),
+            })?;
+        self.conn
+            .execute(
+                "UPDATE urls SET favorite_order = ?1 WHERE id = ?2",
+                [order_b, id_a],
+            )
+            .map_err(|e| StorageError::QueryFailed {
+                reason: e.to_string(),
+            })?;
+        self.conn
+            .execute(
+                "UPDATE urls SET favorite_order = ?1 WHERE id = ?2",
+                [order_a, id_b],
             )
             .map_err(|e| StorageError::QueryFailed {
                 reason: e.to_string(),
@@ -178,7 +237,7 @@ impl<'a> UrlRepository<'a> {
             .conn
             .prepare(
                 "SELECT u.id, u.canonical_url, u.original_url, u.title, u.favicon_path,
-                        u.created_at, u.updated_at, u.archived, u.pinned
+                        u.created_at, u.updated_at, u.archived, u.favorite, u.favorite_order
                  FROM urls u
                  JOIN fts_urls f ON u.id = f.rowid
                  WHERE fts_urls MATCH ?1
@@ -198,7 +257,8 @@ impl<'a> UrlRepository<'a> {
                     created_at: row.get(5)?,
                     updated_at: row.get(6)?,
                     archived: row.get::<_, i64>(7)? != 0,
-                    pinned: row.get::<_, i64>(8)? != 0,
+                    favorite: row.get::<_, i64>(8)? != 0,
+                    favorite_order: row.get(9)?,
                 })
             })
             .map_err(|e| StorageError::QueryFailed {
@@ -251,7 +311,7 @@ mod tests {
     }
 
     #[test]
-    fn list_main_excludes_archived_and_pinned() {
+    fn list_main_excludes_archived_and_favorites() {
         let conn = setup();
         let repo = UrlRepository::new(&conn);
         let url = ValidatedUrl::parse("https://example.com").unwrap();
@@ -260,10 +320,10 @@ mod tests {
         let main = repo.list_main().unwrap();
         assert!(main.is_empty());
 
-        // pinned should also be excluded from main
+        // favorite should also be excluded from main
         let url2 = ValidatedUrl::parse("https://rust-lang.org").unwrap();
         let id2 = repo.insert(&url2, None).unwrap();
-        repo.set_pinned(id2, true).unwrap();
+        repo.set_favorite(id2, true).unwrap();
         let main2 = repo.list_main().unwrap();
         assert!(main2.is_empty());
     }
@@ -289,5 +349,46 @@ mod tests {
         let conn = setup();
         let repo = UrlRepository::new(&conn);
         assert!(!repo.exists("https://unknown.com/").unwrap());
+    }
+
+    #[test]
+    fn favorite_order_increments() {
+        let conn = setup();
+        let repo = UrlRepository::new(&conn);
+        let url1 = ValidatedUrl::parse("https://example.com").unwrap();
+        let id1 = repo.insert(&url1, None).unwrap();
+        repo.set_favorite(id1, true).unwrap();
+
+        let url2 = ValidatedUrl::parse("https://rust-lang.org").unwrap();
+        let id2 = repo.insert(&url2, None).unwrap();
+        repo.set_favorite(id2, true).unwrap();
+
+        let r1 = repo.find_by_id(id1).unwrap().unwrap();
+        let r2 = repo.find_by_id(id2).unwrap().unwrap();
+        assert!(r2.favorite_order > r1.favorite_order);
+    }
+
+    #[test]
+    fn swap_favorite_order_exchanges_positions() {
+        let conn = setup();
+        let repo = UrlRepository::new(&conn);
+        let url1 = ValidatedUrl::parse("https://a.com").unwrap();
+        let id1 = repo.insert(&url1, None).unwrap();
+        repo.set_favorite(id1, true).unwrap();
+
+        let url2 = ValidatedUrl::parse("https://b.com").unwrap();
+        let id2 = repo.insert(&url2, None).unwrap();
+        repo.set_favorite(id2, true).unwrap();
+
+        let before1 = repo.find_by_id(id1).unwrap().unwrap().favorite_order;
+        let before2 = repo.find_by_id(id2).unwrap().unwrap().favorite_order;
+
+        repo.swap_favorite_order(id1, id2).unwrap();
+
+        let after1 = repo.find_by_id(id1).unwrap().unwrap().favorite_order;
+        let after2 = repo.find_by_id(id2).unwrap().unwrap().favorite_order;
+
+        assert_eq!(after1, before2);
+        assert_eq!(after2, before1);
     }
 }

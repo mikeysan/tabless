@@ -15,31 +15,36 @@ impl<'a> MigrationRunner<'a> {
     }
 
     pub fn run_all(&mut self) -> Result<(), StorageError> {
+        self.run_migration(1, INIT_SQL)?;
+        Ok(())
+    }
+
+    fn run_migration(&mut self, version: u32, sql: &str) -> Result<(), StorageError> {
         let tx = self
             .conn
             .transaction()
             .map_err(|e| StorageError::MigrationFailed {
-                version: 1,
+                version,
                 reason: e.to_string(),
             })?;
 
-        tx.execute_batch(INIT_SQL)
+        tx.execute_batch(sql)
             .map_err(|e| StorageError::MigrationFailed {
-                version: 1,
+                version,
                 reason: e.to_string(),
             })?;
 
         tx.execute(
-            "INSERT OR IGNORE INTO _migrations (version, applied_at) VALUES (1, ?1)",
-            [Self::now()],
+            "INSERT OR IGNORE INTO _migrations (version, applied_at) VALUES (?1, ?2)",
+            [version as i64, Self::now()],
         )
         .map_err(|e| StorageError::MigrationFailed {
-            version: 1,
+            version,
             reason: e.to_string(),
         })?;
 
         tx.commit().map_err(|e| StorageError::MigrationFailed {
-            version: 1,
+            version,
             reason: e.to_string(),
         })?;
 

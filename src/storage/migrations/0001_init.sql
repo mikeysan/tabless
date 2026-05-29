@@ -14,7 +14,8 @@ CREATE TABLE IF NOT EXISTS urls (
     created_at    INTEGER NOT NULL,
     updated_at    INTEGER NOT NULL,
     archived      INTEGER NOT NULL DEFAULT 0,
-    pinned        INTEGER NOT NULL DEFAULT 0
+    favorite      INTEGER NOT NULL DEFAULT 0,
+    favorite_order INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS tags (
