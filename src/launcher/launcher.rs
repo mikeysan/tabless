@@ -5,16 +5,18 @@ use super::identity::BrowserIdentity;
 use super::info::BrowserInfo;
 use super::platform::PlatformBrowser;
 use super::registry::BrowserRegistry;
+use super::ChildReaper;
 
 pub struct Launcher<P: PlatformBrowser> {
     platform: P,
     registry: BrowserRegistry,
+    pub(super) reaper: ChildReaper,
 }
 
 impl<P: PlatformBrowser> Launcher<P> {
     pub fn new(platform: P, discovered: Vec<BrowserInfo>) -> Self {
         let registry = BrowserRegistry::new(discovered);
-        Launcher { platform, registry }
+        Launcher { platform, registry, reaper: ChildReaper::new() }
     }
 
     pub fn registry(&self) -> &BrowserRegistry {
