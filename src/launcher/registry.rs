@@ -11,14 +11,18 @@ pub struct BrowserRegistry {
 
 impl BrowserRegistry {
     pub fn new(discovered: Vec<BrowserInfo>) -> Self {
+        let preferred = discovered
+            .iter()
+            .find(|info| info.is_default)
+            .or_else(|| discovered.first())
+            .map(|info| info.identity.clone());
+
         let known = discovered
             .into_iter()
             .map(|info| (info.identity.clone(), info))
             .collect();
-        BrowserRegistry {
-            known,
-            preferred: None,
-        }
+
+        BrowserRegistry { known, preferred }
     }
 
     pub fn set_preferred(&mut self, identity: BrowserIdentity) -> Result<(), DiscoveryError> {
