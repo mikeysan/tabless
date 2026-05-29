@@ -161,6 +161,16 @@ impl PlatformBrowser for MacBrowser {
     fn launch_new_tab(&self, info: &BrowserInfo, url: &str) -> Result<Child, LaunchError> {
         self.launch_url(info, url)
     }
+
+    fn open_default(&self, url: &str) -> Result<(), LaunchError> {
+        std::process::Command::new("open")
+            .arg(url)
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| LaunchError::SpawnFailed {
+                source: e.to_string(),
+            })
+    }
 }
 
 #[cfg(test)]

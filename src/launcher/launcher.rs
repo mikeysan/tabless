@@ -31,13 +31,14 @@ impl<P: PlatformBrowser> Launcher<P> {
         &mut self.registry
     }
 
-    /// Launch a URL in the user's preferred browser.
-    pub fn launch(&self, url: &str) -> Result<Child, LaunchError> {
-        let browser = self
-            .registry
-            .preferred_browser()
-            .ok_or(LaunchError::NoPreferredBrowser)?;
-        self.launch_in_browser(browser, url)
+    /// Launch a URL in the system's default browser.
+    ///
+    /// This delegates directly to the operating system's native URL-opening
+    /// mechanism (e.g. `xdg-open`, `open`, or `ShellExecute`) and does not
+    /// require browser discovery to succeed. Discovery failures can never
+    /// prevent a normal URL launch.
+    pub fn launch(&self, url: &str) -> Result<(), LaunchError> {
+        self.platform.open_default(url)
     }
 
     /// Launch a URL in a specific browser by identity.
@@ -70,7 +71,9 @@ impl<P: PlatformBrowser> Launcher<P> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::launcher::DiscoveryError;
     use crate::launcher::mock::MockPlatform;
+    use std::io;
     use std::path::PathBuf;
 
     fn make_info(identity: BrowserIdentity) -> BrowserInfo {
@@ -92,10 +95,53 @@ mod tests {
     }
 
     #[test]
-    fn launch_fails_when_no_preferred_set() {
+    fn launch_uses_open_default_even_with_empty_registry() {
         let launcher = Launcher::new(MockPlatform::new(vec![]), vec![]);
         let result = launcher.launch("https://example.com");
-        assert!(matches!(result, Err(LaunchError::NoPreferredBrowser)));
+        assert!(
+            matches!(result, Err(LaunchError::SpawnFailed { ref source }) if source.contains("open_default")),
+            "expected open_default to be called when registry is empty, got: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn launch_succeeds_when_open_default_succeeds() {
+        struct SucceedingPlatform;
+
+        impl PlatformBrowser for SucceedingPlatform {
+            fn discover_browsers(&self) -> Result<Vec<BrowserInfo>, DiscoveryError> {
+                Ok(vec![])
+            }
+            fn is_browser_running(&self, _info: &BrowserInfo) -> Result<bool, io::Error> {
+                Ok(false)
+            }
+            fn launch_url(&self, _info: &BrowserInfo, _url: &str) -> Result<Child, LaunchError> {
+                Err(LaunchError::SpawnFailed {
+                    source: "dummy".to_string(),
+                })
+            }
+            fn launch_new_tab(
+                &self,
+                _info: &BrowserInfo,
+                _url: &str,
+            ) -> Result<Child, LaunchError> {
+                Err(LaunchError::SpawnFailed {
+                    source: "dummy".to_string(),
+                })
+            }
+            fn open_default(&self, _url: &str) -> Result<(), LaunchError> {
+                Ok(())
+            }
+        }
+
+        let launcher = Launcher::new(SucceedingPlatform, vec![]);
+        let result = launcher.launch("https://example.com");
+        assert!(
+            result.is_ok(),
+            "expected launch to succeed via open_default, got: {:?}",
+            result
+        );
     }
 
     #[test]

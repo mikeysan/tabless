@@ -76,9 +76,8 @@ pub trait UrlLauncher: Send + Sync {
 
 impl<P: PlatformBrowser> UrlLauncher for Launcher<P> {
     fn launch(&self, url: &str) -> Result<(), LaunchError> {
-        let child = self.launch(url)?;
-        self.reaper.submit(child);
-        Ok(())
+        // Delegates to the OS default handler; never depends on discovery.
+        self.launch(url)
     }
 
     fn launch_with_identity(

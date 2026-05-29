@@ -25,10 +25,10 @@ fn build_launcher() -> (
     Vec<tabless::launcher::BrowserIdentity>,
 ) {
     let platform = DefaultPlatform::new();
-    let discovered = match platform.discover_browsers() {
-        Ok(d) => d,
-        Err(_) => return (None, Vec::new()),
-    };
+    // Discovery is only required for explicit browser selection.
+    // Normal URL launching delegates to the OS and must succeed even when
+    // discovery fails or returns no results.
+    let discovered = platform.discover_browsers().unwrap_or_default();
     let identities: Vec<tabless::launcher::BrowserIdentity> = discovered
         .iter()
         .map(|info| info.identity.clone())

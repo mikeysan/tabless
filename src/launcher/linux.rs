@@ -124,6 +124,16 @@ impl PlatformBrowser for LinuxBrowser {
         // platform-specific new-tab command.
         self.launch_url(info, url)
     }
+
+    fn open_default(&self, url: &str) -> Result<(), LaunchError> {
+        std::process::Command::new("xdg-open")
+            .arg(url)
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| LaunchError::SpawnFailed {
+                source: e.to_string(),
+            })
+    }
 }
 
 #[cfg(test)]

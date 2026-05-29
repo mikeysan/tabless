@@ -47,6 +47,12 @@ impl PlatformBrowser for MockPlatform {
             source: "mock: launch_new_tab called".to_string(),
         })
     }
+
+    fn open_default(&self, _url: &str) -> Result<(), LaunchError> {
+        Err(LaunchError::SpawnFailed {
+            source: "mock: open_default called".to_string(),
+        })
+    }
 }
 
 #[cfg(test)]
