@@ -118,8 +118,10 @@ impl PlatformBrowser for LinuxBrowser {
     }
 
     fn launch_new_tab(&self, info: &BrowserInfo, url: &str) -> Result<Child, LaunchError> {
-        // On Linux, most browsers open a new tab when given a URL if already running.
-        // We use the same command as launch_url.
+        // Linux browsers typically handle a second URL argument by opening a new
+        // tab or window depending on their own configuration. We delegate to
+        // launch_url and rely on the browser's behavior rather than attempting a
+        // platform-specific new-tab command.
         self.launch_url(info, url)
     }
 }
