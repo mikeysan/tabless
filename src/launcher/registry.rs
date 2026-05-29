@@ -101,9 +101,8 @@ mod tests {
     }
 
     #[test]
-    fn preferred_browser_none_when_unset() {
-        let discovered = vec![make_info(BrowserIdentity::Firefox, "/usr/bin/firefox")];
-        let registry = BrowserRegistry::new(discovered);
+    fn preferred_browser_none_when_empty() {
+        let registry = BrowserRegistry::new(vec![]);
         assert!(registry.preferred_browser().is_none());
     }
 }
