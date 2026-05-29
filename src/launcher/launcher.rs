@@ -27,12 +27,10 @@ impl<P: PlatformBrowser> Launcher<P> {
 
     /// Launch a URL in the user's preferred browser.
     pub fn launch(&self, url: &str) -> Result<Child, LaunchError> {
-        let browser =
-            self.registry
-                .preferred_browser()
-                .ok_or_else(|| LaunchError::BrowserNotFound {
-                    identity: BrowserIdentity::Custom("preferred".to_string()),
-                })?;
+        let browser = self
+            .registry
+            .preferred_browser()
+            .ok_or(LaunchError::NoPreferredBrowser)?;
         self.launch_in_browser(browser, url)
     }
 
@@ -91,7 +89,7 @@ mod tests {
     fn launch_fails_when_no_preferred_set() {
         let launcher = make_launcher();
         let result = launcher.launch("https://example.com");
-        assert!(matches!(result, Err(LaunchError::BrowserNotFound { .. })));
+        assert!(matches!(result, Err(LaunchError::NoPreferredBrowser)));
     }
 
     #[test]

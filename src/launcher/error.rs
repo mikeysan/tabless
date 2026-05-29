@@ -39,6 +39,7 @@ impl std::error::Error for DiscoveryError {}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LaunchError {
     BrowserNotFound { identity: BrowserIdentity },
+    NoPreferredBrowser,
     InvalidExecutable { path: PathBuf, reason: String },
     SpawnFailed { source: String },
     AlreadyRunningButTabFailed,
@@ -49,6 +50,9 @@ impl fmt::Display for LaunchError {
         match self {
             LaunchError::BrowserNotFound { identity } => {
                 write!(f, "browser not found: {:?}", identity)
+            }
+            LaunchError::NoPreferredBrowser => {
+                write!(f, "no preferred browser configured")
             }
             LaunchError::InvalidExecutable { path, reason } => {
                 write!(f, "invalid executable at {}: {}", path.display(), reason)

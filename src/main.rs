@@ -45,6 +45,11 @@ fn build_launcher() -> (
     for identity in defaults {
         let _ = launcher.registry_mut().set_preferred(identity);
     }
+    if launcher.registry().preferred_browser().is_none() {
+        if let Some(first) = identities.first() {
+            let _ = launcher.registry_mut().set_preferred(first.clone());
+        }
+    }
     (Some(Box::new(launcher)), identities)
 }
 
