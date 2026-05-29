@@ -40,9 +40,8 @@ impl WindowsBrowser {
             return None;
         }
 
-        if trimmed.starts_with('"') {
+        if let Some(rest) = trimmed.strip_prefix('"') {
             // Quoted path: find the matching closing quote.
-            let rest = &trimmed[1..];
             if let Some(end) = rest.find('"') {
                 let path = &rest[..end];
                 if !path.is_empty() {
