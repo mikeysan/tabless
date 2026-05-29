@@ -33,23 +33,7 @@ fn build_launcher() -> (
         .iter()
         .map(|info| info.identity.clone())
         .collect();
-    let mut launcher = Launcher::new(platform, discovered);
-    // Collect defaults first to avoid borrowing launcher mutably while iterating registry.
-    let defaults: Vec<_> = launcher
-        .registry()
-        .all_browsers()
-        .into_iter()
-        .filter(|info| info.is_default)
-        .map(|info| info.identity.clone())
-        .collect();
-    for identity in defaults {
-        let _ = launcher.registry_mut().set_preferred(identity);
-    }
-    if launcher.registry().preferred_browser().is_none()
-        && let Some(first) = identities.first()
-    {
-        let _ = launcher.registry_mut().set_preferred(first.clone());
-    }
+    let launcher = Launcher::new(platform, discovered);
     (Some(Box::new(launcher)), identities)
 }
 
