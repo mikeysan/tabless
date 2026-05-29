@@ -6,6 +6,7 @@ pub struct MainListState {
     pub selected_index: usize,
     pub search_query: String,
     pub search_focused: bool,
+    pub hovered_id: Option<i64>,
 }
 
 impl Default for MainListState {
@@ -20,6 +21,7 @@ impl MainListState {
             selected_index: 0,
             search_query: String::new(),
             search_focused: false,
+            hovered_id: None,
         }
     }
 
@@ -64,8 +66,9 @@ pub fn main_list_view(
     state: &mut MainListState,
     items: &[UrlRecord],
     is_archive_view: bool,
-) -> Vec<ViewAction> {
+) -> (Vec<ViewAction>, Option<i64>) {
     let mut actions = Vec::new();
+    state.hovered_id = None;
 
     // Search bar
     ui.horizontal(|ui| {
@@ -100,7 +103,7 @@ pub fn main_list_view(
                 ui.label("No URLs match your search.");
             }
         });
-        return actions;
+        return (actions, state.hovered_id);
     }
 
     // Clamp selected_index to filtered list bounds
@@ -116,6 +119,9 @@ pub fn main_list_view(
                 let selected = idx == state.selected_index;
                 let show_actions = selected;
                 let (row_action, response) = url_row(ui, record, selected, show_actions);
+                if response.contains_pointer() {
+                    state.hovered_id = Some(record.id);
+                }
                 response.context_menu(|ui| {
                     if ui.button("Launch").clicked() {
                         actions.push(ViewAction::Launch(record.id));
@@ -154,6 +160,9 @@ pub fn main_list_view(
                 let show_actions = selected;
                 let is_favorite = record.favorite;
                 let (row_action, response) = url_row(ui, record, selected, show_actions);
+                if response.contains_pointer() {
+                    state.hovered_id = Some(record.id);
+                }
                 response.context_menu(|ui| {
                     if ui.button("Launch").clicked() {
                         actions.push(ViewAction::Launch(record.id));
@@ -186,7 +195,7 @@ pub fn main_list_view(
         }
     });
 
-    actions
+    (actions, state.hovered_id)
 }
 
 #[cfg(test)]

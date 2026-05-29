@@ -242,74 +242,7 @@ impl App for TablessApp {
                 .collect()
         };
 
-        let filtered = self.main_list_state.filtered_items(&all_urls);
-
-        if ctx.input(|i| i.key_pressed(egui::Key::ArrowUp)) {
-            self.main_list_state.navigate_up(filtered.len());
-        }
-        if ctx.input(|i| i.key_pressed(egui::Key::ArrowDown)) {
-            self.main_list_state.navigate_down(filtered.len());
-        }
-
-        let mut actions = Vec::new();
-        if let Some(record) = filtered.get(self.main_list_state.selected_index) {
-            if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
-                actions.push(ViewAction::Launch(record.id));
-            }
-            if ctx.input(|i| i.key_pressed(egui::Key::C)) {
-                actions.push(ViewAction::Copy(record.id));
-            }
-            if self.archive_view {
-                if ctx.input(|i| i.key_pressed(egui::Key::R)) {
-                    actions.push(ViewAction::Restore(record.id));
-                }
-            } else {
-                if ctx.input(|i| i.key_pressed(egui::Key::A)) {
-                    actions.push(ViewAction::Archive(record.id));
-                }
-                if ctx.input(|i| i.key_pressed(egui::Key::F)) {
-                    if record.favorite {
-                        actions.push(ViewAction::Unfavorite(record.id));
-                    } else {
-                        actions.push(ViewAction::Favorite(record.id));
-                    }
-                }
-                if record.favorite {
-                    if ctx.input(|i| i.key_pressed(egui::Key::ArrowUp) && i.modifiers.shift) {
-                        actions.push(ViewAction::MoveFavoriteUp(record.id));
-                    }
-                    if ctx.input(|i| i.key_pressed(egui::Key::ArrowDown) && i.modifiers.shift) {
-                        actions.push(ViewAction::MoveFavoriteDown(record.id));
-                    }
-                }
-            }
-            if ctx.input(|i| i.key_pressed(egui::Key::Enter) && i.modifiers.shift) {
-                self.show_browser_picker = true;
-                self.browser_picker_id = Some(record.id);
-            }
-        }
-
-        if ctx.input(|i| i.key_pressed(egui::Key::Tab)) {
-            self.archive_view = !self.archive_view;
-            self.main_list_state.selected_index = 0;
-            self.main_list_state.search_query.clear();
-        }
-
-        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-            self.main_list_state.search_query.clear();
-            self.main_list_state.selected_index = 0;
-            self.main_list_state.search_focused = false;
-            self.show_browser_picker = false;
-            self.browser_picker_id = None;
-        }
-
-        if ctx.input(|i| i.key_pressed(egui::Key::Slash)) {
-            self.main_list_state.search_focused = true;
-        }
-
-        if !actions.is_empty() {
-            self.apply_actions(actions);
-        }
+        let mut hovered_id = None;
 
         egui::CentralPanel::default().show(ctx, |ui| {
             if !self.archive_view {
@@ -339,12 +272,91 @@ impl App for TablessApp {
                 ui.colored_label(egui::Color32::RED, msg);
             }
 
-            let view_actions =
+            let (view_actions, maybe_hovered) =
                 main_list_view(ui, &mut self.main_list_state, &all_urls, self.archive_view);
+            hovered_id = maybe_hovered;
             if !view_actions.is_empty() {
                 self.apply_actions(view_actions);
             }
         });
+
+        let filtered = self.main_list_state.filtered_items(&all_urls);
+
+        if ctx.input(|i| i.key_pressed(egui::Key::ArrowUp)) {
+            self.main_list_state.navigate_up(filtered.len());
+        }
+        if ctx.input(|i| i.key_pressed(egui::Key::ArrowDown)) {
+            self.main_list_state.navigate_down(filtered.len());
+        }
+
+        let mut actions = Vec::new();
+        let target_record = hovered_id
+            .and_then(|id| filtered.iter().find(|r| r.id == id).copied())
+            .or_else(|| filtered.get(self.main_list_state.selected_index).copied());
+
+        if !ctx.wants_keyboard_input() {
+            if let Some(record) = target_record {
+                if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
+                    actions.push(ViewAction::Launch(record.id));
+                }
+                if ctx.input(|i| i.key_pressed(egui::Key::L)) {
+                    actions.push(ViewAction::Launch(record.id));
+                }
+                if ctx.input(|i| i.key_pressed(egui::Key::C)) {
+                    actions.push(ViewAction::Copy(record.id));
+                }
+                if self.archive_view {
+                    if ctx.input(|i| i.key_pressed(egui::Key::R)) {
+                        actions.push(ViewAction::Restore(record.id));
+                    }
+                } else {
+                    if ctx.input(|i| i.key_pressed(egui::Key::A)) {
+                        actions.push(ViewAction::Archive(record.id));
+                    }
+                    if ctx.input(|i| i.key_pressed(egui::Key::F)) {
+                        if record.favorite {
+                            actions.push(ViewAction::Unfavorite(record.id));
+                        } else {
+                            actions.push(ViewAction::Favorite(record.id));
+                        }
+                    }
+                    if record.favorite {
+                        if ctx.input(|i| i.key_pressed(egui::Key::ArrowUp) && i.modifiers.shift) {
+                            actions.push(ViewAction::MoveFavoriteUp(record.id));
+                        }
+                        if ctx.input(|i| i.key_pressed(egui::Key::ArrowDown) && i.modifiers.shift) {
+                            actions.push(ViewAction::MoveFavoriteDown(record.id));
+                        }
+                    }
+                }
+                if ctx.input(|i| i.key_pressed(egui::Key::Enter) && i.modifiers.shift) {
+                    self.show_browser_picker = true;
+                    self.browser_picker_id = Some(record.id);
+                }
+            }
+        }
+
+        if ctx.input(|i| i.key_pressed(egui::Key::Tab)) {
+            self.archive_view = !self.archive_view;
+            self.main_list_state.selected_index = 0;
+            self.main_list_state.search_query.clear();
+        }
+
+        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            self.main_list_state.search_query.clear();
+            self.main_list_state.selected_index = 0;
+            self.main_list_state.search_focused = false;
+            self.show_browser_picker = false;
+            self.browser_picker_id = None;
+        }
+
+        if ctx.input(|i| i.key_pressed(egui::Key::Slash)) {
+            self.main_list_state.search_focused = true;
+        }
+
+        if !actions.is_empty() {
+            self.apply_actions(actions);
+        }
 
         // Browser picker modal
         let mut chosen_identity: Option<BrowserIdentity> = None;

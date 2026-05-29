@@ -107,7 +107,7 @@ pub fn url_row(
             });
     });
 
-    let is_hovered = response.response.hovered();
+    let is_hovered = response.response.contains_pointer();
     ui.ctx()
         .memory_mut(|mem| mem.data.insert_temp(id, is_hovered));
 
