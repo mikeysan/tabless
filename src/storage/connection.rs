@@ -10,7 +10,7 @@ pub fn open_connection(path: &Path) -> Result<Connection, StorageError> {
         reason: e.to_string(),
     })?;
 
-    conn.execute_batch("PRAGMA foreign_keys = ON;")
+    conn.execute_batch("PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;")
         .map_err(|e| StorageError::ConnectionFailed {
             reason: e.to_string(),
         })?;

@@ -15,8 +15,49 @@ impl<'a> MigrationRunner<'a> {
     }
 
     pub fn run_all(&mut self) -> Result<(), StorageError> {
-        self.run_migration(1, INIT_SQL)?;
+        let current = self.current_version()?;
+        if current < 1 {
+            self.run_migration(1, INIT_SQL)?;
+        }
+        if current < 2 {
+            self.add_favorite_columns()?;
+        }
         Ok(())
+    }
+
+    fn current_version(&mut self) -> Result<u32, StorageError> {
+        let exists = match self.conn.query_row(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '_migrations'",
+            [],
+            |_| Ok(true),
+        ) {
+            Ok(v) => v,
+            Err(rusqlite::Error::QueryReturnedNoRows) => false,
+            Err(e) => {
+                return Err(StorageError::MigrationFailed {
+                    version: 0,
+                    reason: e.to_string(),
+                })
+            }
+        };
+
+        if !exists {
+            return Ok(0);
+        }
+
+        match self.conn.query_row(
+            "SELECT MAX(version) FROM _migrations",
+            [],
+            |row| row.get(0),
+        ) {
+            Ok(Some(v)) => Ok(v),
+            Ok(None) => Ok(0),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(0),
+            Err(e) => Err(StorageError::MigrationFailed {
+                version: 0,
+                reason: e.to_string(),
+            }),
+        }
     }
 
     fn run_migration(&mut self, version: u32, sql: &str) -> Result<(), StorageError> {
@@ -47,6 +88,57 @@ impl<'a> MigrationRunner<'a> {
             version,
             reason: e.to_string(),
         })?;
+
+        Ok(())
+    }
+
+    fn add_favorite_columns(&mut self) -> Result<(), StorageError> {
+        let has_favorite = match self.conn.query_row(
+            "SELECT 1 FROM pragma_table_info('urls') WHERE name = 'favorite'",
+            [],
+            |_| Ok(true),
+        ) {
+            Ok(v) => v,
+            Err(rusqlite::Error::QueryReturnedNoRows) => false,
+            Err(e) => {
+                return Err(StorageError::MigrationFailed {
+                    version: 2,
+                    reason: e.to_string(),
+                })
+            }
+        };
+
+        if !has_favorite {
+            self.conn
+                .execute(
+                    "ALTER TABLE urls ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0",
+                    [],
+                )
+                .map_err(|e| StorageError::MigrationFailed {
+                    version: 2,
+                    reason: e.to_string(),
+                })?;
+
+            self.conn
+                .execute(
+                    "ALTER TABLE urls ADD COLUMN favorite_order INTEGER NOT NULL DEFAULT 0",
+                    [],
+                )
+                .map_err(|e| StorageError::MigrationFailed {
+                    version: 2,
+                    reason: e.to_string(),
+                })?;
+        }
+
+        self.conn
+            .execute(
+                "INSERT OR IGNORE INTO _migrations (version, applied_at) VALUES (?1, ?2)",
+                [2i64, Self::now()],
+            )
+            .map_err(|e| StorageError::MigrationFailed {
+                version: 2,
+                reason: e.to_string(),
+            })?;
 
         Ok(())
     }
@@ -87,5 +179,49 @@ mod tests {
         let mut runner = MigrationRunner::new(&mut conn);
         runner.run_all().unwrap();
         runner.run_all().unwrap(); // should not fail
+    }
+
+    #[test]
+    fn migration_2_adds_favorite_columns_to_legacy_schema() {
+        let mut conn = Connection::open_in_memory().unwrap();
+
+        // Simulate legacy schema (migration 1 without favorite columns)
+        conn.execute_batch(
+            "CREATE TABLE _migrations (version INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL);
+             INSERT INTO _migrations (version, applied_at) VALUES (1, 0);
+             CREATE TABLE urls (
+                 id INTEGER PRIMARY KEY,
+                 canonical_url TEXT NOT NULL UNIQUE,
+                 original_url TEXT NOT NULL,
+                 title TEXT,
+                 favicon_path TEXT,
+                 created_at INTEGER NOT NULL,
+                 updated_at INTEGER NOT NULL,
+                 archived INTEGER NOT NULL DEFAULT 0,
+                 pinned INTEGER NOT NULL DEFAULT 0
+             );",
+        )
+        .unwrap();
+
+        let mut runner = MigrationRunner::new(&mut conn);
+        runner.run_all().unwrap();
+
+        let has_favorite: bool = conn
+            .query_row(
+                "SELECT 1 FROM pragma_table_info('urls') WHERE name = 'favorite'",
+                [],
+                |_| Ok(true),
+            )
+            .unwrap();
+        assert!(has_favorite);
+
+        let has_favorite_order: bool = conn
+            .query_row(
+                "SELECT 1 FROM pragma_table_info('urls') WHERE name = 'favorite_order'",
+                [],
+                |_| Ok(true),
+            )
+            .unwrap();
+        assert!(has_favorite_order);
     }
 }
