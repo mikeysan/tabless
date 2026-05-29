@@ -37,7 +37,7 @@ impl<'a> MigrationRunner<'a> {
                 return Err(StorageError::MigrationFailed {
                     version: 0,
                     reason: e.to_string(),
-                })
+                });
             }
         };
 
@@ -45,11 +45,10 @@ impl<'a> MigrationRunner<'a> {
             return Ok(0);
         }
 
-        match self.conn.query_row(
-            "SELECT MAX(version) FROM _migrations",
-            [],
-            |row| row.get(0),
-        ) {
+        match self
+            .conn
+            .query_row("SELECT MAX(version) FROM _migrations", [], |row| row.get(0))
+        {
             Ok(Some(v)) => Ok(v),
             Ok(None) => Ok(0),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(0),
@@ -104,7 +103,7 @@ impl<'a> MigrationRunner<'a> {
                 return Err(StorageError::MigrationFailed {
                     version: 2,
                     reason: e.to_string(),
-                })
+                });
             }
         };
 
