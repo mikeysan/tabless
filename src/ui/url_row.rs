@@ -58,7 +58,12 @@ pub fn url_row(
                 ui.horizontal(|ui| {
                     ui.vertical(|ui| {
                         let title = record.title.as_deref().unwrap_or(&record.canonical_url);
-                        ui.add(egui::Label::new(egui::RichText::new(title).strong()).truncate());
+                        let title_text = if record.favorite {
+                            format!("★ {}", title)
+                        } else {
+                            title.to_string()
+                        };
+                        ui.add(egui::Label::new(egui::RichText::new(title_text).strong()).truncate());
                         ui.add(
                             egui::Label::new(
                                 egui::RichText::new(&record.canonical_url)

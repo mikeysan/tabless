@@ -205,19 +205,25 @@ impl TablessApp {
 
 impl App for TablessApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Global paste handler: valid URLs anywhere in the focused app should add them
-        let paste_texts: Vec<String> = ctx.input_mut(|i| {
-            let mut texts = Vec::new();
-            i.events.retain(|event| {
-                if let egui::Event::Paste(text) = event {
-                    texts.push(text.clone());
-                    false
-                } else {
-                    true
-                }
-            });
-            texts
-        });
+        // Global paste handler: valid URLs anywhere in the focused app should add them.
+        // Only intercept paste when no text edit is focused, so that text fields receive
+        // paste events normally.
+        let paste_texts: Vec<String> = if !ctx.wants_keyboard_input() {
+            ctx.input_mut(|i| {
+                let mut texts = Vec::new();
+                i.events.retain(|event| {
+                    if let egui::Event::Paste(text) = event {
+                        texts.push(text.clone());
+                        false
+                    } else {
+                        true
+                    }
+                });
+                texts
+            })
+        } else {
+            Vec::new()
+        };
         let mut pasted_valid = false;
         for text in paste_texts {
             if let Ok(url) = ValidatedUrl::parse(&text) {
@@ -248,7 +254,23 @@ impl App for TablessApp {
             if !self.archive_view {
                 ui.horizontal(|ui| {
                     ui.label("Add URL:");
-                    let response = ui.text_edit_singleline(&mut self.manual_entry);
+                    let mut entry = self.manual_entry.clone();
+                    let response = ui.text_edit_singleline(&mut entry);
+                    let mut pasted_text: Option<String> = None;
+                    response.context_menu(|ui| {
+                        if ui.button("Paste").clicked() {
+                            if let Ok(mut clipboard) = arboard::Clipboard::new() {
+                                if let Ok(text) = clipboard.get_text() {
+                                    pasted_text = Some(text);
+                                }
+                            }
+                            ui.close_menu();
+                        }
+                    });
+                    if let Some(text) = pasted_text {
+                        entry = text;
+                    }
+                    self.manual_entry = entry;
                     if ui.input(|i| i.key_pressed(egui::Key::Enter)) && response.has_focus() {
                         self.manual_entry_error = None;
                         if let Ok(url) = ValidatedUrl::parse(&self.manual_entry) {
@@ -272,6 +294,19 @@ impl App for TablessApp {
                 ui.colored_label(egui::Color32::RED, msg);
             }
 
+            ui.horizontal(|ui| {
+                if ui.selectable_label(!self.archive_view, "Active").clicked() {
+                    self.archive_view = false;
+                    self.main_list_state.selected_index = 0;
+                    self.main_list_state.search_query.clear();
+                }
+                if ui.selectable_label(self.archive_view, "Archive").clicked() {
+                    self.archive_view = true;
+                    self.main_list_state.selected_index = 0;
+                    self.main_list_state.search_query.clear();
+                }
+            });
+
             let (view_actions, maybe_hovered) =
                 main_list_view(ui, &mut self.main_list_state, &all_urls, self.archive_view);
             hovered_id = maybe_hovered;
@@ -282,11 +317,13 @@ impl App for TablessApp {
 
         let filtered = self.main_list_state.filtered_items(&all_urls);
 
-        if ctx.input(|i| i.key_pressed(egui::Key::ArrowUp)) {
-            self.main_list_state.navigate_up(filtered.len());
-        }
-        if ctx.input(|i| i.key_pressed(egui::Key::ArrowDown)) {
-            self.main_list_state.navigate_down(filtered.len());
+        if !ctx.wants_keyboard_input() {
+            if ctx.input(|i| i.key_pressed(egui::Key::ArrowUp)) {
+                self.main_list_state.navigate_up(filtered.len());
+            }
+            if ctx.input(|i| i.key_pressed(egui::Key::ArrowDown)) {
+                self.main_list_state.navigate_down(filtered.len());
+            }
         }
 
         let mut actions = Vec::new();
@@ -336,21 +373,23 @@ impl App for TablessApp {
             }
         }
 
-        if ctx.input(|i| i.key_pressed(egui::Key::Tab)) {
-            self.archive_view = !self.archive_view;
-            self.main_list_state.selected_index = 0;
-            self.main_list_state.search_query.clear();
-        }
-
         if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-            self.main_list_state.search_query.clear();
-            self.main_list_state.selected_index = 0;
-            self.main_list_state.search_focused = false;
             self.show_browser_picker = false;
             self.browser_picker_id = None;
+            if ctx.wants_keyboard_input() {
+                if let Some(id) = ctx.memory(|mem| mem.focused()) {
+                    ctx.memory_mut(|mem| mem.surrender_focus(id));
+                }
+            } else {
+                self.main_list_state.search_query.clear();
+                self.main_list_state.selected_index = 0;
+                self.main_list_state.search_focused = false;
+            }
         }
 
-        if ctx.input(|i| i.key_pressed(egui::Key::Slash)) {
+        if !ctx.wants_keyboard_input()
+            && ctx.input(|i| i.key_pressed(egui::Key::Slash))
+        {
             self.main_list_state.search_focused = true;
         }
 
