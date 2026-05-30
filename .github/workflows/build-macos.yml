@@ -44,36 +44,30 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Build release binary
-        run: cargo build --release
+      - name: Install cargo-bundle
+        run: cargo install cargo-bundle --locked
 
-      - name: Create .app bundle
+      - name: Build macOS app bundle
+        run: cargo bundle --release
+
+      - name: Verify bundle exists
         run: |
-          APP=target/release/bundle/Tabless.app
-          mkdir -p "$APP/Contents/MacOS"
-          mkdir -p "$APP/Contents/Resources"
-          cp target/release/tabless "$APP/Contents/MacOS/Tabless"
-          cat > "$APP/Contents/Info.plist" << EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>CFBundleName</key>
-            <string>Tabless</string>
-            <key>CFBundleIdentifier</key>
-            <string>com.mikeysan.tabless</string>
-            <key>CFBundleVersion</key>
-            <string>0.1.0</string>
-            <key>CFBundleExecutable</key>
-            <string>Tabless</string>
-            <key>CFBundlePackageType</key>
-            <string>APPL</string>
-          </dict>
-          </plist>
-          EOF
+          ls -la target/release/bundle/osx
+          test -d target/release/bundle/osx/Tabless.app
 
-      - name: Upload macOS artifact
+      - name: Create DMG
+        run: |
+          mkdir -p dist
+
+          hdiutil create \
+            -volname "Tabless" \
+            -srcfolder target/release/bundle/osx/Tabless.app \
+            -ov \
+            -format UDZO \
+            dist/Tabless.dmg
+
+      - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
         with:
           name: tabless-macos
-          path: target/release/bundle/Tabless.app
+          path: dist/Tabless.dmg
