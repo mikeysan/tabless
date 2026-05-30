@@ -192,6 +192,26 @@ impl TablessApp {
         }
     }
 
+    fn try_insert_manual_url(&mut self) -> bool {
+        self.manual_entry_error = None;
+        if let Ok(url) = ValidatedUrl::parse(&self.manual_entry) {
+            match self.storage.urls().insert(&url, None) {
+                Ok(_) => {
+                    self.manual_entry.clear();
+                    self.refresh_urls();
+                    true
+                }
+                Err(e) => {
+                    self.manual_entry_error = Some(format!("Insert failed: {}", e));
+                    false
+                }
+            }
+        } else {
+            self.manual_entry_error = Some("Invalid URL".to_string());
+            false
+        }
+    }
+
     fn drain_ipc(&mut self) -> bool {
         let mut notified = false;
         if let Some(ref rx) = self.ipc_rx {
@@ -254,8 +274,36 @@ impl App for TablessApp {
             if !self.archive_view {
                 ui.horizontal(|ui| {
                     ui.label("Add URL:");
+                    let add_url_id = egui::Id::new("add_url_field");
                     let mut entry = self.manual_entry.clone();
-                    let response = ui.text_edit_singleline(&mut entry);
+
+                    // If the Add URL field is focused, intercept paste events
+                    // containing valid URLs and create entries immediately.
+                    if ctx.memory(|mem| mem.focused()) == Some(add_url_id) {
+                        let mut pasted_urls: Vec<String> = Vec::new();
+                        ctx.input_mut(|i| {
+                            i.events.retain(|event| {
+                                if let egui::Event::Paste(text) = event
+                                    && ValidatedUrl::parse(text).is_ok()
+                                {
+                                    pasted_urls.push(text.clone());
+                                    return false;
+                                }
+                                true
+                            });
+                        });
+                        for text in pasted_urls {
+                            if let Ok(url) = ValidatedUrl::parse(&text) {
+                                if let Err(e) = self.storage.urls().insert(&url, None) {
+                                    log::error!("Paste insert from field failed: {}", e);
+                                } else {
+                                    self.refresh_urls();
+                                }
+                            }
+                        }
+                    }
+
+                    let response = ui.add(egui::TextEdit::singleline(&mut entry).id(add_url_id));
                     let mut pasted_text: Option<String> = None;
                     response.context_menu(|ui| {
                         if ui.button("Paste").clicked() {
@@ -268,21 +316,16 @@ impl App for TablessApp {
                         }
                     });
                     if let Some(text) = pasted_text {
-                        entry = text;
+                        self.manual_entry = text;
+                        self.try_insert_manual_url();
+                    } else {
+                        self.manual_entry = entry;
                     }
-                    self.manual_entry = entry;
+                    if ui.button("Add").clicked() {
+                        self.try_insert_manual_url();
+                    }
                     if ui.input(|i| i.key_pressed(egui::Key::Enter)) && response.has_focus() {
-                        self.manual_entry_error = None;
-                        if let Ok(url) = ValidatedUrl::parse(&self.manual_entry) {
-                            if let Err(e) = self.storage.urls().insert(&url, None) {
-                                self.manual_entry_error = Some(format!("Insert failed: {}", e));
-                            } else {
-                                self.manual_entry.clear();
-                                self.refresh_urls();
-                            }
-                        } else {
-                            self.manual_entry_error = Some("Invalid URL".to_string());
-                        }
+                        self.try_insert_manual_url();
                     }
                 });
                 if let Some(ref err) = self.manual_entry_error {
