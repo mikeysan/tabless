@@ -7,6 +7,12 @@ authors = ["Mikey San"]
 repository = "https://github.com/mikeysan/tabless"
 license = "MIT OR Apache-2.0"
 
+[package.metadata.bundle]
+name = "Tabless"
+identifier = "com.mikeysan.tabless"
+short_description = "Lightweight URL capture and launch utility"
+category = "Productivity"
+
 [dependencies]
 dirs = "5"
 url = "2.5"
