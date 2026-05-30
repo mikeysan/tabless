@@ -259,10 +259,10 @@ impl App for TablessApp {
                     let mut pasted_text: Option<String> = None;
                     response.context_menu(|ui| {
                         if ui.button("Paste").clicked() {
-                            if let Ok(mut clipboard) = arboard::Clipboard::new() {
-                                if let Ok(text) = clipboard.get_text() {
-                                    pasted_text = Some(text);
-                                }
+                            if let Ok(mut clipboard) = arboard::Clipboard::new()
+                                && let Ok(text) = clipboard.get_text()
+                            {
+                                pasted_text = Some(text);
                             }
                             ui.close_menu();
                         }
