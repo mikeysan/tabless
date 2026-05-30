@@ -94,8 +94,7 @@ fn register_macos(binary_path: &Path) -> Result<(), ProtocolError> {
         reason: format!("create dir failed: {}", e),
     })?;
 
-    let info_plist = format!(
-        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+    let info_plist = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
          <!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n\
          <plist version=\"1.0\">\n\
          <dict>\n\
@@ -118,7 +117,7 @@ fn register_macos(binary_path: &Path) -> Result<(), ProtocolError> {
          </array>\n\
          </dict>\n\
          </plist>\n"
-    );
+        .to_string();
 
     fs::write(contents.join("Info.plist"), info_plist).map_err(|e| {
         ProtocolError::RegistrationFailed {

@@ -99,10 +99,8 @@ pub fn url_row(
                                     if ui.button("U").on_hover_text("Unfavorite").clicked() {
                                         action = Some(ViewAction::Unfavorite(record.id));
                                     }
-                                } else {
-                                    if ui.button("F").on_hover_text("Favorite").clicked() {
-                                        action = Some(ViewAction::Favorite(record.id));
-                                    }
+                                } else if ui.button("F").on_hover_text("Favorite").clicked() {
+                                    action = Some(ViewAction::Favorite(record.id));
                                 }
                                 if ui.button("A").on_hover_text("Archive").clicked() {
                                     action = Some(ViewAction::Archive(record.id));

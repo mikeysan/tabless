@@ -177,11 +177,9 @@ pub fn main_list_view(
                             actions.push(ViewAction::Unfavorite(record.id));
                             ui.close_menu();
                         }
-                    } else {
-                        if ui.button("Favorite").clicked() {
-                            actions.push(ViewAction::Favorite(record.id));
-                            ui.close_menu();
-                        }
+                    } else if ui.button("Favorite").clicked() {
+                        actions.push(ViewAction::Favorite(record.id));
+                        ui.close_menu();
                     }
                     if ui.button("Archive").clicked() {
                         actions.push(ViewAction::Archive(record.id));

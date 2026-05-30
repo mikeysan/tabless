@@ -121,6 +121,7 @@ fn run_gui(storage: tabless::storage::Storage, ipc_rx: Option<std::sync::mpsc::R
 }
 
 fn main() {
+    #[cfg(debug_assertions)]
     let _ = env_logger::try_init();
 
     let args: Vec<String> = std::env::args().collect();
