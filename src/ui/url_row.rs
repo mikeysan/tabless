@@ -63,7 +63,9 @@ pub fn url_row(
                         } else {
                             title.to_string()
                         };
-                        ui.add(egui::Label::new(egui::RichText::new(title_text).strong()).truncate());
+                        ui.add(
+                            egui::Label::new(egui::RichText::new(title_text).strong()).truncate(),
+                        );
                         ui.add(
                             egui::Label::new(
                                 egui::RichText::new(&record.canonical_url)

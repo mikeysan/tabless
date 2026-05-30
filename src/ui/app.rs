@@ -387,9 +387,7 @@ impl App for TablessApp {
             }
         }
 
-        if !ctx.wants_keyboard_input()
-            && ctx.input(|i| i.key_pressed(egui::Key::Slash))
-        {
+        if !ctx.wants_keyboard_input() && ctx.input(|i| i.key_pressed(egui::Key::Slash)) {
             self.main_list_state.search_focused = true;
         }
 
